@@ -1,0 +1,141 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color-scheme: light dark;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+/* 毛玻璃效果 */
+.glass {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.dark .glass {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.card-hover {
+  transition: all 0.3s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+}
+
+/* 背景渐变 */
+.dark-gradient {
+  background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 50%, #1e3a5f 100%);
+}
+
+.light-gradient {
+  background: linear-gradient(135deg, #e0f2fe 0%, #f0f9ff 50%, #e0f2fe 100%);
+}
+
+.gradient-bg {
+  background: linear-gradient(135deg, #1e3a5f 0%, #2d4a6f 50%, #1a2f4a 100%);
+}
+
+/* 自定义滚动条 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a1a1a1;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: #2d2d2d;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #555;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #666;
+}
+
+/* ExcelCSV 表格样式 */
+.table-cell {
+  @apply px-3 py-2 text-sm text-gray-800 dark:text-gray-200 border-r border-gray-200 dark:border-gray-700 truncate;
+}
+
+.table-header-cell {
+  @apply px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 border-r border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800;
+}
+
+/* JSON 工具样式 */
+.json-editor {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.json-tree {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 13px;
+}
+
+.json-key { color: #9b2c2c; }
+.json-string { color: #22543d; }
+.json-number { color: #2b6cb0; }
+.json-boolean { color: #805ad5; }
+.json-null { color: #718096; }
+
+.dark .json-key { color: #fc8181; }
+.dark .json-string { color: #68d391; }
+.dark .json-number { color: #63b3ed; }
+.dark .json-boolean { color: #b794f4; }
+.dark .json-null { color: #a0aec0; }
+
+.json-output {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.json-output .json-bracket { color: #ffd700; font-weight: 500; }
+.json-output .json-key { color: #7dd3fc; }
+.json-output .json-string { color: #86efac; }
+.json-output .json-number { color: #fca5a5; }
+.json-output .json-boolean { color: #c4b5fd; font-weight: 500; }
+.json-output .json-null { color: #9ca3af; font-style: italic; }
+.json-output .json-colon { color: #94a3b8; }
+.json-output .json-comma { color: #94a3b8; }
+
+.dark .json-output .json-bracket { color: #fbbf24; }
+.dark .json-output .json-key { color: #67e8f9; }
+.dark .json-output .json-string { color: #4ade80; }
+.dark .json-output .json-number { color: #f87171; }
+.dark .json-output .json-boolean { color: #a78bfa; }
+.dark .json-output .json-null { color: #6b7280; }
