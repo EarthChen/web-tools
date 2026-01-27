@@ -1,0 +1,42 @@
+{
+  "version": "1.0.0",
+  "baseUrl": "https://earthchen.github.io/web-tools",
+  "tools": [
+    {
+      "id": "excelcsv-tool",
+      "title": "CSV/Excel 互转",
+      "description": "高性能 CSV/Excel 互转工具，支持 100MB+ 大文件，智能筛选与虚拟滚动",
+      "path": "/excelcsv-tool",
+      "icon": "table",
+      "gradient": "from-emerald-500 to-teal-600",
+      "tags": ["数据处理", "大文件"]
+    },
+    {
+      "id": "json-tools",
+      "title": "JSON 工具集",
+      "description": "格式化、压缩、对比、JSONPath 查询、修复等一站式 JSON 处理工具",
+      "path": "/json-tools",
+      "icon": "code",
+      "gradient": "from-green-500 to-teal-600",
+      "tags": ["开发工具", "格式化"]
+    },
+    {
+      "id": "pdf2png",
+      "title": "PDF 转 PNG",
+      "description": "免费在线将 PDF 文档转换为高质量 PNG 图片，支持批量下载",
+      "path": "/pdf2png",
+      "icon": "document",
+      "gradient": "from-red-500 to-orange-600",
+      "tags": ["文档转换", "图片"]
+    },
+    {
+      "id": "photo-tool",
+      "title": "证件照处理工具",
+      "description": "智能抠图、背景替换、尺寸调整、体积压缩，一站式证件照处理",
+      "path": "/photo-tool",
+      "icon": "camera",
+      "gradient": "from-blue-500 to-purple-600",
+      "tags": ["图片处理", "AI"]
+    }
+  ]
+}
