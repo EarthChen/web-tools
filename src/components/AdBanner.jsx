@@ -282,36 +282,47 @@ export function BottomBannerAd() {
 }
 
 /**
- * 文章内嵌广告组件
+ * 内嵌广告组件（不影响内容区的底部横幅式）
  */
 export function InlineAd() {
-  if (!AD_CONFIG.enabled) return null;
-  
+  useEffect(() => {
+    if (ADSENSE_CONFIG.clientId && ADSENSE_CONFIG.slots.inline) {
+      loadAdSenseScript();
+      setTimeout(initAdUnit, 100);
+    }
+  }, []);
+
   return (
-    <div className="my-4 bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-      <div className="text-center text-xs text-gray-400 dark:text-gray-500 mb-2">
+    <div className="glass rounded-xl p-4 border border-white/10">
+      <div className="text-center text-xs text-white/40 mb-2">
         广告
       </div>
-      <div 
-        className="bg-white dark:bg-gray-700 rounded p-6 text-center"
-        id="inline-ad"
-      >
-        <p className="text-sm text-gray-400 dark:text-gray-500">
-          内嵌广告位
-        </p>
-      </div>
+      {ADSENSE_CONFIG.clientId && ADSENSE_CONFIG.slots.inline ? (
+        <ins
+          className="adsbygoogle"
+          style={{ display: 'block', minHeight: '90px' }}
+          data-ad-client={ADSENSE_CONFIG.clientId}
+          data-ad-slot={ADSENSE_CONFIG.slots.inline}
+          data-ad-format="horizontal"
+          data-full-width-responsive="true"
+        />
+      ) : (
+        <div className="bg-white/5 rounded-lg p-6 text-center min-h-[90px] flex items-center justify-center">
+          <p className="text-sm text-white/30">
+            广告位 - 设置环境变量启用 AdSense
+          </p>
+        </div>
+      )}
     </div>
   );
 }
 
 /**
- * 广告管理组件 - 统一管理所有广告
+ * 广告管理组件 - 统一管理所有广告（不使用弹窗）
  */
 export function AdManager() {
   return (
     <>
-      <PopupAd />
-      <SidebarAd position="right" />
       <BottomBannerAd />
     </>
   );

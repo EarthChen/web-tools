@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { InlineAd } from '@/components/AdBanner'
 
 const tools = [
   {
@@ -129,6 +130,11 @@ function Home({ isDark, onToggleTheme }) {
               </div>
             </Link>
           ))}
+        </div>
+
+        {/* 内嵌广告区域 */}
+        <div className="mt-8">
+          <InlineAd />
         </div>
       </main>
 
