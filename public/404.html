@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>EarthChen 在线工具集</title>
+  <script>
+    // GitHub Pages SPA 重定向
+    // 将 404 请求重定向到 index.html，并保留原始路径
+    const path = window.location.pathname;
+    const query = window.location.search;
+    const hash = window.location.hash;
+    
+    // 构建重定向 URL，将路径信息编码到 query string 中
+    const redirectUrl = '/web-tools/?redirect=' + encodeURIComponent(path + query + hash);
+    window.location.replace(redirectUrl);
+  </script>
+</head>
+<body>
+  <p>正在跳转...</p>
+</body>
+</html>

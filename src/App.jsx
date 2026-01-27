@@ -1,6 +1,7 @@
 import { Routes, Route } from 'react-router-dom'
 import { useState, useEffect, lazy, Suspense } from 'react'
 import Home from './pages/Home'
+import { FeedbackButton } from './components/FeedbackButton'
 
 // 懒加载各工具页面
 const ExcelCsvTool = lazy(() => import('./pages/excelcsv/App'))
@@ -34,15 +35,19 @@ function App() {
   }
 
   return (
-    <Suspense fallback={<Loading />}>
-      <Routes>
-        <Route path="/" element={<Home isDark={isDark} onToggleTheme={toggleTheme} />} />
-        <Route path="/excelcsv-tool" element={<ExcelCsvTool />} />
-        <Route path="/json-tools" element={<JsonTools isDark={isDark} onToggleTheme={toggleTheme} />} />
-        <Route path="/pdf2png" element={<Pdf2Png isDark={isDark} onToggleTheme={toggleTheme} />} />
-        <Route path="/photo-tool" element={<PhotoTool />} />
-      </Routes>
-    </Suspense>
+    <>
+      <Suspense fallback={<Loading />}>
+        <Routes>
+          <Route path="/" element={<Home isDark={isDark} onToggleTheme={toggleTheme} />} />
+          <Route path="/excelcsv-tool" element={<ExcelCsvTool />} />
+          <Route path="/json-tools" element={<JsonTools isDark={isDark} onToggleTheme={toggleTheme} />} />
+          <Route path="/pdf2png" element={<Pdf2Png isDark={isDark} onToggleTheme={toggleTheme} />} />
+          <Route path="/photo-tool" element={<PhotoTool />} />
+        </Routes>
+      </Suspense>
+      {/* 全局反馈按钮 */}
+      <FeedbackButton />
+    </>
   )
 }
 

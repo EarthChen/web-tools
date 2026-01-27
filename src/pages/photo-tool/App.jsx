@@ -15,7 +15,6 @@ import {
   APIConfig,
   StatusPanel,
   ThemeToggle,
-  FeedbackButton,
 } from './components';
 import { AdManager } from '@/components/AdBanner';
 
@@ -329,9 +328,6 @@ function App() {
           &copy; {new Date().getFullYear()} EarthChen. All rights reserved.
         </p>
       </footer>
-      
-      {/* 反馈按钮 */}
-      <FeedbackButton />
       
       {/* 广告管理 */}
       <AdManager />
