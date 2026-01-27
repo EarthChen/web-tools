@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import Header from './components/Header'
 import Footer from './components/Footer'
+import { InlineAd } from '@/components/AdBanner'
 import PdfUploader from './components/PdfUploader'
 import ConversionResult from './components/ConversionResult'
 import ImageUploader from './components/ImageUploader'
@@ -405,6 +406,11 @@ function App() {
               </div>
             ))}
           </section>
+          
+          {/* 广告区域 */}
+          <div className="mt-8">
+            <InlineAd />
+          </div>
         </main>
 
         <Footer />

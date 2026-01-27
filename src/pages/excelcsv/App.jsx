@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import Header from './components/Header'
+import { InlineAd } from '@/components/AdBanner'
 import FileUploader from './components/FileUploader'
 import VirtualTable from './components/VirtualTable'
 import StatusBar from './components/StatusBar'
@@ -337,6 +338,11 @@ function App() {
       
       {/* 底部状态栏 */}
       <StatusBar status={status} />
+      
+      {/* 广告区域 */}
+      <div className="p-4 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-200 dark:border-gray-700">
+        <InlineAd />
+      </div>
     </div>
   )
 }

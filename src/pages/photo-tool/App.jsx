@@ -16,7 +16,7 @@ import {
   StatusPanel,
   ThemeToggle,
 } from './components';
-import { AdManager } from '@/components/AdBanner';
+import { AdManager, InlineAd } from '@/components/AdBanner';
 
 function App() {
   const editor = useImageEditor();
@@ -320,6 +320,11 @@ function App() {
             </div>
           </div>
         )}
+        
+        {/* 广告区域 */}
+        <div className="mt-8 max-w-7xl mx-auto px-4">
+          <InlineAd />
+        </div>
       </main>
       
       {/* 页脚 */}

@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useRef } from 'react'
 import Header from './components/Header'
 import Footer from './components/Footer'
+import { InlineAd } from '@/components/AdBanner'
 import JsonEditor from './components/JsonEditor'
 import JsonHighlighter from './components/JsonHighlighter'
 import JsonTree from './components/JsonTree'
@@ -317,6 +318,11 @@ function App() {
               </div>
             </div>
 
+          </div>
+          
+          {/* 广告区域 */}
+          <div className="mt-8">
+            <InlineAd />
           </div>
         </main>
 
