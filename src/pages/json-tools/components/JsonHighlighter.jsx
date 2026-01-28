@@ -74,14 +74,14 @@ function JsonHighlighter({ value, placeholder }) {
 
   if (!value || !value.trim()) {
     return (
-      <div className="w-full h-[400px] bg-white/5 rounded-lg p-4 overflow-auto">
+      <div className="w-full min-h-[300px] max-h-[800px] bg-white/5 rounded-lg p-4 overflow-auto">
         <p className="text-white/40 font-mono text-sm">{placeholder}</p>
       </div>
     )
   }
 
   return (
-    <div className="w-full h-[400px] bg-gray-900/50 rounded-lg p-4 overflow-auto border border-white/10">
+    <div className="w-full min-h-[300px] max-h-[800px] bg-gray-900/50 rounded-lg p-4 overflow-auto border border-white/10">
       <pre
         className="json-output text-white m-0"
         dangerouslySetInnerHTML={{ __html: highlightedHtml }}

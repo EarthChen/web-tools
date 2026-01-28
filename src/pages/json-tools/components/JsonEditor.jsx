@@ -1,4 +1,4 @@
-import { useRef, useCallback } from 'react'
+import { useRef, useCallback, useEffect } from 'react'
 
 // 括号配对映射
 const BRACKET_PAIRS = {
@@ -12,6 +12,18 @@ const CLOSING_BRACKETS = new Set(['}', ']', '"'])
 
 function JsonEditor({ value, onChange, placeholder, readOnly = false }) {
   const textareaRef = useRef(null)
+
+  // 自动调整高度
+  useEffect(() => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+
+    // 重置高度以获取正确的 scrollHeight
+    textarea.style.height = 'auto'
+    // 设置为内容高度，但不低于最小高度 300px，不超过最大高度 800px
+    const newHeight = Math.min(Math.max(textarea.scrollHeight, 300), 800)
+    textarea.style.height = `${newHeight}px`
+  }, [value])
 
   // 处理键盘输入，实现括号自动补全
   const handleKeyDown = useCallback((e) => {
@@ -142,7 +154,7 @@ function JsonEditor({ value, onChange, placeholder, readOnly = false }) {
   return (
     <textarea
       ref={textareaRef}
-      className="w-full h-[400px] bg-white/10 rounded-lg p-4 text-white font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-white/30 placeholder-white/40 json-editor"
+      className="w-full min-h-[300px] max-h-[800px] bg-white/10 rounded-lg p-4 text-white font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-white/30 placeholder-white/40 json-editor"
       value={value}
       onChange={(e) => onChange?.(e.target.value)}
       onKeyDown={handleKeyDown}

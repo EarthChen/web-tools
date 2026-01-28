@@ -1,26 +1,34 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { JSONPath } from 'jsonpath-plus'
 
 function JsonPathPanel({ input, parsedJson }) {
   const [query, setQuery] = useState('$')
-  const [result, setResult] = useState('')
-  const [error, setError] = useState(null)
 
-  const handleQuery = useCallback(() => {
+  // 实时查询结果
+  const { result, error } = useMemo(() => {
+    if (!query.trim()) {
+      return { result: '', error: null }
+    }
+    
+    if (!parsedJson) {
+      return { result: '', error: '请输入有效的 JSON 数据' }
+    }
+
     try {
-      if (!parsedJson) {
-        setError('请输入有效的 JSON 数据')
-        return
-      }
-      
       const queryResult = JSONPath({ path: query, json: parsedJson })
-      setResult(JSON.stringify(queryResult, null, 2))
-      setError(null)
+      return { 
+        result: JSON.stringify(queryResult, null, 2), 
+        error: null 
+      }
     } catch (e) {
-      setError(e.message)
-      setResult('')
+      return { result: '', error: e.message }
     }
   }, [parsedJson, query])
+
+  // 兼容性保留：点击查询按钮不做额外操作
+  const handleQuery = useCallback(() => {
+    // 实时查询已处理，此方法仅保留为回车触发
+  }, [])
 
   const handleCopyResult = useCallback(() => {
     navigator.clipboard.writeText(result)
@@ -36,26 +44,23 @@ function JsonPathPanel({ input, parsedJson }) {
 
   return (
     <div className="mb-4 p-4 bg-white/5 rounded-lg">
-      <div className="flex flex-wrap gap-2 items-center mb-3">
-        <span className="text-white/80 text-sm font-medium">JSONPath:</span>
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="flex-1 min-w-[200px] bg-white/10 text-white rounded px-3 py-1.5 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-white/30"
-          placeholder="输入 JSONPath 表达式"
-          onKeyDown={(e) => e.key === 'Enter' && handleQuery()}
-        />
-        <button
-          onClick={handleQuery}
-          className="px-3 py-1.5 bg-white text-gray-800 rounded text-sm font-medium hover:bg-white/90 transition-colors"
-        >
-          查询
-        </button>
+      <div className="flex flex-wrap gap-3 items-start mb-3">
+        <div className="flex-1 min-w-[300px]">
+          <label className="text-white/80 text-sm font-medium block mb-2">
+            JSONPath 查询表达式
+          </label>
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="w-full bg-white/10 text-white rounded-lg px-4 py-3 font-mono text-base focus:outline-none focus:ring-2 focus:ring-white/30 placeholder-white/40"
+            placeholder="输入 JSONPath 表达式，如 $.data.items[*].name"
+          />
+        </div>
         {result && (
           <button
             onClick={handleCopyResult}
-            className="px-3 py-1.5 bg-white/20 text-white rounded text-sm font-medium hover:bg-white/30 transition-colors"
+            className="mt-7 px-4 py-2 bg-white/20 text-white rounded-lg text-sm font-medium hover:bg-white/30 transition-colors"
           >
             复制结果
           </button>
@@ -63,28 +68,34 @@ function JsonPathPanel({ input, parsedJson }) {
       </div>
 
       {/* 快捷示例 */}
-      <div className="flex flex-wrap gap-1 mb-3">
+      <div className="flex flex-wrap gap-2 mb-4">
+        <span className="text-white/60 text-xs">快捷示例:</span>
         {examples.map((ex) => (
           <button
             key={ex.query}
             onClick={() => setQuery(ex.query)}
-            className="text-xs px-2 py-1 bg-white/10 text-white/70 rounded hover:bg-white/20"
+            className="text-xs px-3 py-1.5 bg-white/10 text-white/80 rounded-lg hover:bg-white/20 transition-colors"
             title={ex.desc}
           >
-            {ex.query}
+            {ex.query} <span className="text-white/50">({ex.desc})</span>
           </button>
         ))}
       </div>
 
       {/* 结果显示 */}
       {result && (
-        <pre className="bg-white/10 rounded p-3 text-sm text-white/90 font-mono max-h-[150px] overflow-auto">
-          {result}
-        </pre>
+        <div>
+          <label className="text-white/80 text-sm font-medium block mb-2">
+            查询结果
+          </label>
+          <pre className="bg-white/10 rounded-lg p-4 text-sm text-white/90 font-mono whitespace-pre-wrap break-words">
+            {result}
+          </pre>
+        </div>
       )}
 
       {error && (
-        <p className="text-red-300 text-sm mt-2">{error}</p>
+        <p className="text-red-300 text-sm mt-2">⚠️ {error}</p>
       )}
     </div>
   )

@@ -305,7 +305,7 @@ function App() {
                     placeholder="处理结果将显示在这里..."
                   />
                 ) : (
-                  <div className="bg-white/10 rounded-lg p-4 h-[400px] overflow-auto">
+                  <div className="bg-white/10 rounded-lg p-4 min-h-[300px] max-h-[800px] overflow-auto">
                     {parsedJson ? (
                       <JsonTree data={parsedJson} />
                     ) : (
