@@ -2,6 +2,7 @@ import { Routes, Route } from 'react-router-dom'
 import { useState, useEffect, lazy, Suspense } from 'react'
 import Home from './pages/Home'
 import { FeedbackButton } from './components/FeedbackButton'
+import { Agentation } from 'agentation'
 
 // 懒加载各工具页面
 const ExcelCsvTool = lazy(() => import('./pages/excelcsv/App'))
@@ -47,6 +48,8 @@ function App() {
       </Suspense>
       {/* 全局反馈按钮 */}
       <FeedbackButton />
+      {/* AI 可视化反馈工具 (仅开发环境) */}
+      {import.meta.env.DEV && <Agentation />}
     </>
   )
 }
