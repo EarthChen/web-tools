@@ -8,8 +8,9 @@ import JsonTree from './components/JsonTree'
 import Toolbar from './components/Toolbar'
 import JsonPathPanel from './components/JsonPathPanel'
 import HistoryPanel from './components/HistoryPanel'
+import JsonDiffViewer from './components/JsonDiffViewer'
 import { useHistory } from './hooks/useHistory'
-import { formatJson, minifyJson, sortKeys, unescapeJson, escapeJson, repairJson, validateJson } from './utils/jsonUtils'
+import { formatJson, minifyJson, sortKeys, unescapeJson, escapeJson, repairJson, validateJson, compareJson } from './utils/jsonUtils'
 
 function App() {
   const [isDark, setIsDark] = useState(false)
@@ -20,6 +21,8 @@ function App() {
   const [outputMode, setOutputMode] = useState('text') // 'text' | 'tree'
   const [showJsonPath, setShowJsonPath] = useState(false)
   const [copyStatus, setCopyStatus] = useState('idle') // 'idle' | 'success' | 'error'
+  const [compareMode, setCompareMode] = useState(false) // 对比模式
+  const [compareInput, setCompareInput] = useState('') // 对比用的第二个 JSON
   const { history, addToHistory, removeFromHistory, clearHistory } = useHistory()
   const saveTimeoutRef = useRef(null)
   const copyTimeoutRef = useRef(null)
@@ -34,6 +37,21 @@ function App() {
     const validation = validateJson(input)
     return validation.valid ? validation.data : null
   }, [input])
+
+  // 对比结果
+  const compareResult = useMemo(() => {
+    if (!compareMode) return null
+    return compareJson(input, compareInput)
+  }, [compareMode, input, compareInput])
+
+  // 切换对比模式
+  const handleToggleCompareMode = useCallback(() => {
+    setCompareMode(prev => !prev)
+    if (!compareMode) {
+      // 进入对比模式时清空对比输入
+      setCompareInput('')
+    }
+  }, [compareMode])
 
   const handleInputChange = useCallback((value) => {
     setInput(value)
@@ -202,6 +220,8 @@ function App() {
               onRepair={handleRepair}
               indentSize={indentSize}
               onIndentSizeChange={setIndentSize}
+              compareMode={compareMode}
+              onToggleCompareMode={handleToggleCompareMode}
             />
 
             {/* 视图切换和历史记录 */}
@@ -230,93 +250,154 @@ function App() {
             )}
 
             {/* 编辑器区域 */}
-            <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
-              {/* 输入区 */}
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <label className="text-white/80 text-sm">输入 JSON</label>
-                  {error && (
-                    <span className="text-red-300 text-xs truncate max-w-[200px]" title={error}>
-                      ⚠️ {error}
-                    </span>
-                  )}
-                </div>
-                <JsonEditor
-                  value={input}
-                  onChange={handleInputChange}
-                  placeholder="在此粘贴或输入 JSON..."
-                />
-              </div>
-
-              {/* 输出区 - 文本/树状切换 */}
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setOutputMode('text')}
-                      className={`text-sm px-3 py-1 rounded transition-all ${
-                        outputMode === 'text'
-                          ? 'bg-white/30 text-white'
-                          : 'bg-white/10 text-white/70 hover:bg-white/20'
-                      }`}
-                    >
-                      输出结果
-                    </button>
-                    <button
-                      onClick={() => setOutputMode('tree')}
-                      className={`text-sm px-3 py-1 rounded transition-all ${
-                        outputMode === 'tree'
-                          ? 'bg-white/30 text-white'
-                          : 'bg-white/10 text-white/70 hover:bg-white/20'
-                      }`}
-                    >
-                      树状视图
-                    </button>
-                  </div>
-                  {outputMode === 'text' && (
-                    <div className="flex gap-2">
-                      <button
-                        onClick={handleCopyOutput}
-                        disabled={!output}
-                        className={`text-xs px-2 py-1 rounded transition-all disabled:opacity-50 ${
-                          copyStatus === 'success'
-                            ? 'bg-green-500/80 text-white'
-                            : copyStatus === 'error'
-                            ? 'bg-red-500/80 text-white'
-                            : 'bg-white/10 text-white hover:bg-white/20'
-                        }`}
-                      >
-                        {copyStatus === 'success' ? '✓ 已复制' : copyStatus === 'error' ? '✗ 失败' : '复制'}
-                      </button>
-                      <button
-                        onClick={handleApplyOutput}
-                        disabled={!output}
-                        className="text-xs px-2 py-1 bg-white/10 text-white rounded hover:bg-white/20 disabled:opacity-50"
-                      >
-                        应用到输入
-                      </button>
+            {compareMode ? (
+              /* 对比模式 */
+              <div className="space-y-4">
+                {/* 双输入区 */}
+                <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
+                  {/* 左侧输入 */}
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <label className="text-white/80 text-sm">原始 JSON (左)</label>
+                      {error && (
+                        <span className="text-red-300 text-xs truncate max-w-[200px]" title={error}>
+                          ⚠️ {error}
+                        </span>
+                      )}
                     </div>
-                  )}
+                    <JsonEditor
+                      value={input}
+                      onChange={handleInputChange}
+                      placeholder="在此粘贴或输入原始 JSON..."
+                    />
+                  </div>
+
+                  {/* 右侧输入 */}
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <label className="text-white/80 text-sm">对比 JSON (右)</label>
+                      {compareResult?.error && (
+                        <span className="text-red-300 text-xs truncate max-w-[200px]" title={compareResult.error}>
+                          ⚠️ {compareResult.error}
+                        </span>
+                      )}
+                    </div>
+                    <JsonEditor
+                      value={compareInput}
+                      onChange={setCompareInput}
+                      placeholder="在此粘贴或输入要对比的 JSON..."
+                    />
+                  </div>
                 </div>
 
-                {outputMode === 'text' ? (
-                  <JsonHighlighter
-                    value={output}
-                    placeholder="处理结果将显示在这里..."
-                  />
-                ) : (
-                  <div className="bg-white/10 rounded-lg p-4 min-h-[300px] max-h-[800px] overflow-auto">
-                    {parsedJson ? (
-                      <JsonTree data={parsedJson} />
-                    ) : (
-                      <p className="text-white/50 text-center py-8">
-                        {input ? '无效的 JSON 格式' : '请输入 JSON 数据'}
-                      </p>
-                    )}
+                {/* 对比结果 */}
+                {compareResult && !compareResult.error && (input.trim() || compareInput.trim()) && (
+                  <div className="bg-white/5 rounded-xl p-4">
+                    <h3 className="text-white font-medium mb-4 flex items-center gap-2">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                      </svg>
+                      对比结果
+                    </h3>
+                    <JsonDiffViewer
+                      leftParsed={compareResult.leftParsed}
+                      rightParsed={compareResult.rightParsed}
+                      diffs={compareResult.diffs}
+                      stats={compareResult.stats}
+                    />
                   </div>
                 )}
               </div>
-            </div>
+            ) : (
+              /* 普通模式 */
+              <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
+                {/* 输入区 */}
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <label className="text-white/80 text-sm">输入 JSON</label>
+                    {error && (
+                      <span className="text-red-300 text-xs truncate max-w-[200px]" title={error}>
+                        ⚠️ {error}
+                      </span>
+                    )}
+                  </div>
+                  <JsonEditor
+                    value={input}
+                    onChange={handleInputChange}
+                    placeholder="在此粘贴或输入 JSON..."
+                  />
+                </div>
+
+                {/* 输出区 - 文本/树状切换 */}
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setOutputMode('text')}
+                        className={`text-sm px-3 py-1 rounded transition-all ${
+                          outputMode === 'text'
+                            ? 'bg-white/30 text-white'
+                            : 'bg-white/10 text-white/70 hover:bg-white/20'
+                        }`}
+                      >
+                        输出结果
+                      </button>
+                      <button
+                        onClick={() => setOutputMode('tree')}
+                        className={`text-sm px-3 py-1 rounded transition-all ${
+                          outputMode === 'tree'
+                            ? 'bg-white/30 text-white'
+                            : 'bg-white/10 text-white/70 hover:bg-white/20'
+                        }`}
+                      >
+                        树状视图
+                      </button>
+                    </div>
+                    {outputMode === 'text' && (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleCopyOutput}
+                          disabled={!output}
+                          className={`text-xs px-2 py-1 rounded transition-all disabled:opacity-50 ${
+                            copyStatus === 'success'
+                              ? 'bg-green-500/80 text-white'
+                              : copyStatus === 'error'
+                              ? 'bg-red-500/80 text-white'
+                              : 'bg-white/10 text-white hover:bg-white/20'
+                          }`}
+                        >
+                          {copyStatus === 'success' ? '✓ 已复制' : copyStatus === 'error' ? '✗ 失败' : '复制'}
+                        </button>
+                        <button
+                          onClick={handleApplyOutput}
+                          disabled={!output}
+                          className="text-xs px-2 py-1 bg-white/10 text-white rounded hover:bg-white/20 disabled:opacity-50"
+                        >
+                          应用到输入
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {outputMode === 'text' ? (
+                    <JsonHighlighter
+                      value={output}
+                      placeholder="处理结果将显示在这里..."
+                    />
+                  ) : (
+                    <div className="bg-white/10 rounded-lg p-4 min-h-[300px] max-h-[800px] overflow-auto">
+                      {parsedJson ? (
+                        <JsonTree data={parsedJson} />
+                      ) : (
+                        <p className="text-white/50 text-center py-8">
+                          {input ? '无效的 JSON 格式' : '请输入 JSON 数据'}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
           </div>
           

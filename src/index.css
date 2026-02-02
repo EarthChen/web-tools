@@ -104,17 +104,25 @@ body {
   font-size: 13px;
 }
 
-.json-key { color: #9b2c2c; }
-.json-string { color: #22543d; }
-.json-number { color: #2b6cb0; }
-.json-boolean { color: #805ad5; }
-.json-null { color: #718096; }
+/* 树状视图颜色 - 亮色模式 */
+.json-key { color: #0891b2; font-weight: 600; }
+.json-string { color: #059669; }
+.json-number { color: #dc2626; }
+.json-boolean { color: #7c3aed; font-weight: 600; }
+.json-null { color: #6b7280; font-style: italic; }
 
-.dark .json-key { color: #fc8181; }
-.dark .json-string { color: #68d391; }
-.dark .json-number { color: #63b3ed; }
-.dark .json-boolean { color: #b794f4; }
-.dark .json-null { color: #a0aec0; }
+/* 树状视图颜色 - 深色背景优化 (更高对比度) */
+.json-tree .json-key { color: #22d3ee; font-weight: 600; }
+.json-tree .json-string { color: #4ade80; }
+.json-tree .json-number { color: #fb923c; font-weight: 500; }
+.json-tree .json-boolean { color: #c084fc; font-weight: 600; }
+.json-tree .json-null { color: #9ca3af; font-style: italic; }
+
+.dark .json-key { color: #67e8f9; font-weight: 600; }
+.dark .json-string { color: #6ee7b7; }
+.dark .json-number { color: #fca5a5; }
+.dark .json-boolean { color: #c4b5fd; font-weight: 600; }
+.dark .json-null { color: #9ca3af; font-style: italic; }
 
 .json-output {
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;

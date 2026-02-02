@@ -20,7 +20,7 @@ function JsonNode({ keyName, value, path, depth = 0 }) {
 
   const renderValue = () => {
     if (value === null) {
-      return <span className="json-null">null</span>
+      return <span className="json-null font-medium">null</span>
     }
     if (typeof value === 'boolean') {
       return <span className="json-boolean">{value.toString()}</span>
@@ -29,7 +29,9 @@ function JsonNode({ keyName, value, path, depth = 0 }) {
       return <span className="json-number">{value}</span>
     }
     if (typeof value === 'string') {
-      return <span className="json-string">"{value}"</span>
+      // 处理长字符串截断显示
+      const displayValue = value.length > 100 ? value.slice(0, 100) + '...' : value
+      return <span className="json-string">"{displayValue}"</span>
     }
     return null
   }
@@ -43,11 +45,11 @@ function JsonNode({ keyName, value, path, depth = 0 }) {
   return (
     <div className="json-tree" style={{ marginLeft: depth > 0 ? '20px' : '0' }}>
       <div
-        className="group flex items-center gap-1 py-0.5 hover:bg-white/5 rounded cursor-pointer"
+        className="group flex items-center gap-1.5 py-1 hover:bg-white/10 rounded-md cursor-pointer px-1 -mx-1 transition-colors"
         onClick={toggleExpand}
       >
         {isObject && !isEmpty && (
-          <span className="text-white/50 w-4 text-center">
+          <span className="text-amber-400 w-4 text-center text-xs font-bold transition-transform">
             {isExpanded ? '▼' : '▶'}
           </span>
         )}
@@ -56,20 +58,20 @@ function JsonNode({ keyName, value, path, depth = 0 }) {
         {keyName !== null && (
           <>
             <span className="json-key">"{keyName}"</span>
-            <span className="text-white/50">:</span>
+            <span className="text-slate-400 font-medium">:</span>
           </>
         )}
         
         {isObject ? (
           <>
-            <span className="text-white/70">
+            <span className="text-amber-400 font-bold">
               {isArray ? '[' : '{'}
             </span>
             {(!isExpanded || isEmpty) && (
-              <span className="text-white/50">
+              <span className="text-slate-400">
                 {isEmpty 
                   ? (isArray ? ']' : '}')
-                  : `...${Object.keys(value).length} items${isArray ? ']' : '}'}`
+                  : <><span className="text-slate-500 italic">{Object.keys(value).length} items</span><span className="text-amber-400 font-bold">{isArray ? ']' : '}'}</span></>
                 }
               </span>
             )}
@@ -111,8 +113,8 @@ function JsonNode({ keyName, value, path, depth = 0 }) {
               />
             )
           })}
-          <div style={{ marginLeft: '20px' }}>
-            <span className="text-white/70">{isArray ? ']' : '}'}</span>
+          <div style={{ marginLeft: '20px' }} className="py-0.5">
+            <span className="text-amber-400 font-bold">{isArray ? ']' : '}'}</span>
           </div>
         </>
       )}
