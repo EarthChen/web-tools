@@ -39,10 +39,10 @@ const tools = [
     id: 'photo-tool',
     name: '证件照 Pro',
     description: 'AI 智能抠图与尺寸调整',
-    longDescription: '一键生成标准证件照。支持背景替换、智能美颜及精确的文件体积控制。',
+    longDescription: '一键生成标准证件照。支持背景替换、智能美颜及精确的文件体积控制。同时提供微信小程序版本。',
     icon: '📷',
-    path: '/photo-tool',
-    tags: ['AI', '图像'],
+    externalUrl: 'https://earthchen.github.io/photo-tools/',
+    tags: ['AI', '图像', '小程序'],
     color: 'from-pink-400 to-rose-500',
     span: 'md:col-span-3',
   },
@@ -113,10 +113,15 @@ function Home({ isDark, onToggleTheme }) {
 
         {/* Bento Grid Layout */}
         <div className="grid grid-cols-1 md:grid-cols-6 gap-6 mb-12">
-          {tools.map((tool) => (
-            <Link
+          {tools.map((tool) => {
+            const Wrapper = tool.externalUrl ? 'a' : Link
+            const linkProps = tool.externalUrl
+              ? { href: tool.externalUrl, target: '_blank', rel: 'noopener noreferrer' }
+              : { to: tool.path }
+            return (
+            <Wrapper
               key={tool.id}
-              to={tool.path}
+              {...linkProps}
               className={`${tool.span} group relative overflow-hidden rounded-3xl p-1 transition-all duration-300 hover:scale-[1.01] hover:shadow-2xl`}
             >
               {/* Gradient Border Gradient */}
@@ -155,15 +160,22 @@ function Home({ isDark, onToggleTheme }) {
                   <div className={`flex items-center text-sm font-semibold ${
                     isDark ? 'text-cyan-400' : 'text-cyan-600'
                   } group-hover:gap-2 transition-all`}>
-                    立即使用
-                    <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-                    </svg>
+                    {tool.externalUrl ? '前往使用' : '立即使用'}
+                    {tool.externalUrl ? (
+                      <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    ) : (
+                      <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                      </svg>
+                    )}
                   </div>
                 </div>
               </div>
-            </Link>
-          ))}
+            </Wrapper>
+            )
+          })}
         </div>
 
         {/* Ad Section */}

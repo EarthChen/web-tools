@@ -8,7 +8,6 @@ import { Agentation } from 'agentation'
 const ExcelCsvTool = lazy(() => import('./pages/excelcsv/App'))
 const JsonTools = lazy(() => import('./pages/json-tools/App'))
 const Pdf2Png = lazy(() => import('./pages/pdf2png/App'))
-const PhotoTool = lazy(() => import('./pages/photo-tool/App'))
 
 // 加载中组件
 function Loading() {
@@ -43,7 +42,6 @@ function App() {
           <Route path="/excelcsv-tool" element={<ExcelCsvTool />} />
           <Route path="/json-tools" element={<JsonTools isDark={isDark} onToggleTheme={toggleTheme} />} />
           <Route path="/pdf2png" element={<Pdf2Png isDark={isDark} onToggleTheme={toggleTheme} />} />
-          <Route path="/photo-tool" element={<PhotoTool />} />
         </Routes>
       </Suspense>
       {/* 全局反馈按钮 */}
