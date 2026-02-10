@@ -52,7 +52,7 @@ const tools = [
     description: 'AI 智能抠图与尺寸调整',
     longDescription: '一键生成标准证件照。支持背景替换、智能美颜及精确的文件体积控制。同时提供微信小程序版本。',
     icon: '📷',
-    externalUrl: 'https://earthchen.github.io/photo-tools/',
+    externalUrl: '/web-tools/photo-tools/',
     tags: ['AI', '图像', '小程序'],
     color: 'from-pink-400 to-rose-500',
     span: 'md:col-span-3',

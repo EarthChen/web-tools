@@ -33,7 +33,7 @@
       "id": "photo-tool",
       "title": "证件照处理工具",
       "description": "智能抠图、背景替换、尺寸调整、体积压缩，一站式证件照处理",
-      "url": "https://earthchen.github.io/photo-tools/",
+      "url": "/web-tools/photo-tools/",
       "icon": "camera",
       "gradient": "from-blue-500 to-purple-600",
       "tags": ["图片处理", "AI", "小程序"]
