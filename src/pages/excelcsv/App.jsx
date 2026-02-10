@@ -1,14 +1,25 @@
 import { useState, useCallback, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import Header from './components/Header'
 import { InlineAd } from '@/components/AdBanner'
 import FileUploader from './components/FileUploader'
 import VirtualTable from './components/VirtualTable'
 import StatusBar from './components/StatusBar'
 import FilterTags from './components/FilterTags'
+import SearchBar from './components/SearchBar'
+import ContextMenu from './components/ContextMenu'
+import ColumnStatsPopover from './components/ColumnStatsPopover'
+import BatchOperationsDialog from './components/BatchOperationsDialog'
+import AdvancedToolbar from './components/AdvancedToolbar'
+import {
+  ConditionalDeleteDialog, SplitColumnDialog, MergeColumnsDialog,
+  RegexExtractDialog, VLookupDialog, NumberFormatDialog, DateFormatDialog,
+  ExportSelectiveDialog, JsonExportDialog,
+} from './components/AdvancedDialogs'
 import { useWorker } from './hooks/useWorker'
 
 function App() {
+  // Core state
   const [fileInfo, setFileInfo] = useState(null)
   const [sheetNames, setSheetNames] = useState([])
   const [currentSheet, setCurrentSheet] = useState(null)
@@ -16,333 +27,459 @@ function App() {
   const [totalRows, setTotalRows] = useState(0)
   const [filteredIndices, setFilteredIndices] = useState([])
   const [filters, setFilters] = useState({})
-  const [sheetFilters, setSheetFilters] = useState({}) // { sheetName: filters }
-  const [sheetIndices, setSheetIndices] = useState({}) // { sheetName: filteredIndices }
+  const [sheetFilters, setSheetFilters] = useState({})
+  const [sheetIndices, setSheetIndices] = useState({})
   const [status, setStatus] = useState({ type: 'idle', message: '' })
   const [uploadProgress, setUploadProgress] = useState(0)
-  
-  const { 
-    parseFile, 
-    switchSheet,
-    getUniqueValues, 
-    applyFilter, 
-    getRows, 
-    exportFile,
-    cleanup 
-  } = useWorker()
+  const [sortState, setSortState] = useState({ columnIndex: null, direction: null })
+  const [editState, setEditState] = useState({ canUndo: false, canRedo: false, isModified: false, historySize: 0 })
 
-  // 页面关闭/刷新确认
-  useEffect(() => {
-    const handleBeforeUnload = (e) => {
-      if (fileInfo) {
-        e.preventDefault()
-        e.returnValue = '您有未保存的数据，确定要离开吗？'
-        return e.returnValue
-      }
+  // Search
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchResults, setSearchResults] = useState(null)
+  const [currentSearchIndex, setCurrentSearchIndex] = useState(0)
+  const [searchHighlights, setSearchHighlights] = useState([])
+
+  // UI state
+  const [contextMenu, setContextMenu] = useState({ isOpen: false, position: { x: 0, y: 0 }, cellInfo: null })
+  const [columnStats, setColumnStats] = useState({ isOpen: false, stats: null })
+  const [batchOps, setBatchOps] = useState({ isOpen: false, columnIndex: null, columnName: '' })
+  const [duplicateHighlights, setDuplicateHighlights] = useState([])
+  const [selectedCells, setSelectedCells] = useState([])
+  const [columnWidths, setColumnWidths] = useState({})
+  const [frozenColumns, setFrozenColumns] = useState(new Set()) // Set<number> of frozen column indices
+  const [hiddenColumns, setHiddenColumns] = useState(new Set()) // Set<number> of hidden column indices
+
+  // Advanced dialog state
+  const [activeDialog, setActiveDialog] = useState(null)
+  // 'conditionalDelete' | 'splitColumn' | 'mergeColumns' | 'regexExtract' | 'vlookup' | 'numberFormat' | 'dateFormat' | 'exportSelective' | 'exportJson'
+
+  const w = useWorker()
+
+  const navigate = useNavigate()
+
+  // Navigation guard: confirm before leaving when file is loaded
+  const confirmLeave = useCallback((e, path) => {
+    if (!fileInfo) return // No data, allow navigation
+    e.preventDefault()
+    const msg = editState.isModified
+      ? '当前有已修改但未导出的数据，离开后将丢失。确定要离开吗？'
+      : '当前有已加载的数据，离开后将丢失。确定要离开吗？'
+    if (window.confirm(msg)) {
+      navigate(path)
     }
+  }, [fileInfo, editState.isModified, navigate])
 
-    window.addEventListener('beforeunload', handleBeforeUnload)
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  // Helper: download blob
+  const downloadBlob = useCallback((blobUrl, filename) => {
+    const link = document.createElement('a')
+    link.href = blobUrl
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(blobUrl)
+  }, [])
+
+  // Helper: refresh indices
+  const refreshIndices = useCallback(async () => {
+    try {
+      let result
+      if (sortState.columnIndex !== null && sortState.direction) result = await w.sortData(sortState.columnIndex, sortState.direction, filters)
+      else result = await w.applyFilter(filters)
+      setFilteredIndices(result.indices)
+    } catch (error) { console.error('refresh error:', error) }
+  }, [w, sortState, filters])
+
+  // Helper: sync edit state
+  const markModified = useCallback(() => {
+    setEditState(prev => ({ ...prev, canUndo: true, canRedo: false, isModified: true }))
+  }, [])
+
+  // --- Global Keyboard ---
+  useEffect(() => {
+    const h = (e) => {
+      const mod = e.metaKey || e.ctrlKey
+      if (mod && e.key === 'f' && fileInfo) { e.preventDefault(); setSearchOpen(true) }
+      if (mod && e.key === 'z' && !e.shiftKey && fileInfo) { e.preventDefault(); handleUndo() }
+      if (mod && ((e.key === 'z' && e.shiftKey) || e.key === 'y') && fileInfo) { e.preventDefault(); handleRedo() }
+    }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [fileInfo, editState])
+
+  // Block browser tab close / refresh when file is loaded
+  useEffect(() => {
+    const h = (e) => {
+      if (fileInfo) { e.preventDefault(); e.returnValue = '当前有数据未导出，确定离开吗？' }
+    }
+    window.addEventListener('beforeunload', h)
+    return () => window.removeEventListener('beforeunload', h)
   }, [fileInfo])
 
-  // 处理文件上传
+  // ========================== FILE ==========================
   const handleFileUpload = useCallback(async (file) => {
     try {
       setStatus({ type: 'loading', message: '正在解析文件...' })
       setUploadProgress(0)
-      
-      // 模拟进度
-      const progressInterval = setInterval(() => {
-        setUploadProgress(prev => Math.min(prev + 10, 90))
-      }, 100)
+      const iv = setInterval(() => setUploadProgress(p => Math.min(p + 10, 90)), 100)
+      const r = await w.parseFile(file)
+      clearInterval(iv); setUploadProgress(100)
+      const ext = file.name.split('.').pop()?.toLowerCase() || ''
+      const fileType = ext === 'csv' ? 'csv' : ['json', 'jsonl', 'ndjson'].includes(ext) ? 'json' : 'xlsx'
+      setFileInfo({ name: file.name, size: file.size, type: fileType })
+      const first = r.currentSheet || r.sheetNames?.[0]
+      setSheetNames(r.sheetNames || []); setCurrentSheet(first); setHeaders(r.headers); setTotalRows(r.totalRows); setFilteredIndices(r.indices)
+      setFilters({}); setSortState({ columnIndex: null, direction: null }); setEditState({ canUndo: false, canRedo: false, isModified: false, historySize: 0 })
+      setColumnWidths({}); setFrozenColumns(new Set()); setHiddenColumns(new Set()); setDuplicateHighlights([]); setSearchHighlights([]); setSearchResults(null)
+      const sf = {}, si = {}; r.sheetNames?.forEach(n => { sf[n] = {}; si[n] = null }); if (first) si[first] = r.indices
+      setSheetFilters(sf); setSheetIndices(si)
+      setStatus({ type: 'success', message: `成功加载 ${r.totalRows.toLocaleString()} 行数据${r.sheetNames?.length > 1 ? ` (${r.sheetNames.length}个工作表)` : ''}` })
+      setTimeout(() => setUploadProgress(0), 500)
+    } catch (e) { setStatus({ type: 'error', message: `解析失败: ${e.message}` }); setUploadProgress(0) }
+  }, [w])
 
-      const result = await parseFile(file)
-      
-      clearInterval(progressInterval)
-      setUploadProgress(100)
-      
-      setFileInfo({
-        name: file.name,
-        size: file.size,
-        type: file.name.endsWith('.csv') ? 'csv' : 'xlsx'
-      })
-      const firstSheet = result.currentSheet || result.sheetNames?.[0] || null
-      setSheetNames(result.sheetNames || [])
-      setCurrentSheet(firstSheet)
-      setHeaders(result.headers)
-      setTotalRows(result.totalRows)
-      setFilteredIndices(result.indices)
-      setFilters({})
-      // 初始化每个 Sheet 的筛选状态
-      const initialSheetFilters = {}
-      const initialSheetIndices = {}
-      result.sheetNames?.forEach(name => {
-        initialSheetFilters[name] = {}
-        initialSheetIndices[name] = null // null 表示未筛选
-      })
-      if (firstSheet) {
-        initialSheetIndices[firstSheet] = result.indices
-      }
-      setSheetFilters(initialSheetFilters)
-      setSheetIndices(initialSheetIndices)
-      
-      const sheetInfo = result.sheetNames?.length > 1 ? ` (${result.sheetNames.length} 个工作表)` : ''
-      setStatus({ type: 'success', message: `成功加载 ${result.totalRows.toLocaleString()} 行数据${sheetInfo}` })
-      
-      setTimeout(() => {
-        setUploadProgress(0)
-      }, 500)
-    } catch (error) {
-      setStatus({ type: 'error', message: `解析失败: ${error.message}` })
-      setUploadProgress(0)
-    }
-  }, [parseFile])
+  const handleAppendFile = useCallback(async (file) => {
+    try {
+      setStatus({ type: 'loading', message: '正在追加导入...' })
+      const r = await w.appendFile(file)
+      setTotalRows(r.totalRows); setFilteredIndices(r.indices); await refreshIndices()
+      setStatus({ type: 'success', message: `追加 ${r.appended} 行，共 ${r.totalRows} 行` })
+    } catch (e) { setStatus({ type: 'error', message: `追加失败: ${e.message}` }) }
+  }, [w, refreshIndices])
 
-  // 处理筛选变更
+  // ========================== HIDE COLUMN ==========================
+  const handleHideColumn = useCallback((colIndex) => {
+    setHiddenColumns(prev => { const next = new Set(prev); next.add(colIndex); return next })
+    setStatus({ type: 'success', message: `已隐藏列 "${headers[colIndex]}"` })
+  }, [headers])
+
+  const handleShowColumn = useCallback((colIndex) => {
+    setHiddenColumns(prev => { const next = new Set(prev); next.delete(colIndex); return next })
+  }, [])
+
+  const handleShowAllColumns = useCallback(() => {
+    setHiddenColumns(new Set())
+    setStatus({ type: 'success', message: '已显示所有列' })
+  }, [])
+
+  // ========================== FILTER ==========================
   const handleFilterChange = useCallback(async (columnIndex, selectedValues) => {
-    const newFilters = { ...filters }
-    
-    if (selectedValues === null || selectedValues.length === 0) {
-      delete newFilters[columnIndex]
-    } else {
-      newFilters[columnIndex] = selectedValues
-    }
-    
-    setFilters(newFilters)
-    setStatus({ type: 'loading', message: '正在应用筛选...' })
-    
+    const nf = { ...filters }; if (!selectedValues || selectedValues.length === 0) delete nf[columnIndex]; else nf[columnIndex] = selectedValues
+    setFilters(nf); setStatus({ type: 'loading', message: '正在筛选...' })
     try {
-      const result = await applyFilter(newFilters)
-      setFilteredIndices(result.indices)
-      // 保存当前 Sheet 的筛选状态
-      if (currentSheet) {
-        setSheetFilters(prev => ({ ...prev, [currentSheet]: newFilters }))
-        setSheetIndices(prev => ({ ...prev, [currentSheet]: result.indices }))
-      }
-      setStatus({ 
-        type: 'success', 
-        message: `筛选完成，显示 ${result.indices.length.toLocaleString()} / ${totalRows.toLocaleString()} 行` 
-      })
-    } catch (error) {
-      setStatus({ type: 'error', message: `筛选失败: ${error.message}` })
-    }
-  }, [filters, applyFilter, totalRows, currentSheet])
+      const r = sortState.direction ? await w.sortData(sortState.columnIndex, sortState.direction, nf) : await w.applyFilter(nf)
+      setFilteredIndices(r.indices)
+      if (currentSheet) { setSheetFilters(p => ({ ...p, [currentSheet]: nf })); setSheetIndices(p => ({ ...p, [currentSheet]: r.indices })) }
+      setStatus({ type: 'success', message: `显示 ${r.indices.length.toLocaleString()} / ${totalRows.toLocaleString()} 行` })
+    } catch (e) { setStatus({ type: 'error', message: e.message }) }
+  }, [filters, w, sortState, totalRows, currentSheet])
 
-  // 获取列的唯一值
-  const handleGetUniqueValues = useCallback(async (columnIndex) => {
+  const handleGetUniqueValues = useCallback(async (ci) => {
+    try { return await w.getUniqueValues(ci) } catch { return { values: [], hasMore: false } }
+  }, [w])
+
+  const handleRemoveFilter = useCallback(async (ci) => {
+    const nf = { ...filters }; delete nf[ci]; setFilters(nf)
     try {
-      const result = await getUniqueValues(columnIndex)
-      return result
-    } catch (error) {
-      setStatus({ type: 'error', message: `获取筛选值失败: ${error.message}` })
-      return { values: [], hasMore: false }
-    }
-  }, [getUniqueValues])
+      const r = sortState.direction ? await w.sortData(sortState.columnIndex, sortState.direction, nf) : await w.applyFilter(nf)
+      setFilteredIndices(r.indices)
+      if (currentSheet) { setSheetFilters(p => ({ ...p, [currentSheet]: nf })); setSheetIndices(p => ({ ...p, [currentSheet]: r.indices })) }
+      setStatus({ type: 'success', message: `显示 ${r.indices.length.toLocaleString()} 行` })
+    } catch (e) { setStatus({ type: 'error', message: e.message }) }
+  }, [filters, w, sortState, currentSheet])
 
-  // 处理导出
-  const handleExport = useCallback(async (format) => {
-    try {
-      setStatus({ type: 'loading', message: `正在导出 ${format.toUpperCase()} 文件...` })
-      
-      const result = await exportFile(format, filteredIndices)
-      
-      // 创建下载链接
-      const link = document.createElement('a')
-      link.href = result.blobUrl
-      link.download = `export_${Date.now()}.${format}`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      
-      // 释放 Blob URL
-      URL.revokeObjectURL(result.blobUrl)
-      
-      setStatus({ type: 'success', message: `成功导出 ${filteredIndices.length.toLocaleString()} 行数据` })
-    } catch (error) {
-      setStatus({ type: 'error', message: `导出失败: ${error.message}` })
-    }
-  }, [exportFile, filteredIndices])
-
-  // 清理
-  const handleClear = useCallback(() => {
-    cleanup()
-    setFileInfo(null)
-    setSheetNames([])
-    setCurrentSheet(null)
-    setHeaders([])
-    setTotalRows(0)
-    setFilteredIndices([])
-    setFilters({})
-    setSheetFilters({})
-    setSheetIndices({})
-    setStatus({ type: 'idle', message: '' })
-  }, [cleanup])
-
-  // 移除单个筛选条件
-  const handleRemoveFilter = useCallback(async (columnIndex) => {
-    const newFilters = { ...filters }
-    delete newFilters[columnIndex]
-    
-    setFilters(newFilters)
-    setStatus({ type: 'loading', message: '正在更新筛选...' })
-    
-    try {
-      const result = await applyFilter(newFilters)
-      setFilteredIndices(result.indices)
-      // 保存当前 Sheet 的筛选状态
-      if (currentSheet) {
-        setSheetFilters(prev => ({ ...prev, [currentSheet]: newFilters }))
-        setSheetIndices(prev => ({ ...prev, [currentSheet]: result.indices }))
-      }
-      setStatus({ 
-        type: 'success', 
-        message: Object.keys(newFilters).length > 0 
-          ? `筛选完成，显示 ${result.indices.length.toLocaleString()} / ${totalRows.toLocaleString()} 行`
-          : `已清除筛选，显示全部 ${totalRows.toLocaleString()} 行`
-      })
-    } catch (error) {
-      setStatus({ type: 'error', message: `更新筛选失败: ${error.message}` })
-    }
-  }, [filters, applyFilter, totalRows, currentSheet])
-
-  // 清除所有筛选条件
   const handleClearAllFilters = useCallback(async () => {
     setFilters({})
-    setStatus({ type: 'loading', message: '正在清除筛选...' })
-    
     try {
-      const result = await applyFilter({})
-      setFilteredIndices(result.indices)
-      // 保存当前 Sheet 的筛选状态
-      if (currentSheet) {
-        setSheetFilters(prev => ({ ...prev, [currentSheet]: {} }))
-        setSheetIndices(prev => ({ ...prev, [currentSheet]: result.indices }))
-      }
-      setStatus({ type: 'success', message: `已清除筛选，显示全部 ${totalRows.toLocaleString()} 行` })
-    } catch (error) {
-      setStatus({ type: 'error', message: `清除筛选失败: ${error.message}` })
-    }
-  }, [applyFilter, totalRows, currentSheet])
+      const r = sortState.direction ? await w.sortData(sortState.columnIndex, sortState.direction, {}) : await w.applyFilter({})
+      setFilteredIndices(r.indices)
+      if (currentSheet) { setSheetFilters(p => ({ ...p, [currentSheet]: {} })); setSheetIndices(p => ({ ...p, [currentSheet]: r.indices })) }
+      setStatus({ type: 'success', message: `显示全部 ${totalRows.toLocaleString()} 行` })
+    } catch (e) { setStatus({ type: 'error', message: e.message }) }
+  }, [w, sortState, totalRows, currentSheet])
 
-  // 切换 Sheet
-  const handleSwitchSheet = useCallback(async (sheetName) => {
-    if (sheetName === currentSheet) return
-    
-    // 保存当前 Sheet 的筛选状态
-    if (currentSheet) {
-      setSheetFilters(prev => ({ ...prev, [currentSheet]: filters }))
-      setSheetIndices(prev => ({ ...prev, [currentSheet]: filteredIndices }))
-    }
-    
-    setStatus({ type: 'loading', message: `正在切换到 ${sheetName}...` })
-    
+  // ========================== SORT ==========================
+  const handleSort = useCallback(async (ci, dir) => {
     try {
-      const result = await switchSheet(sheetName)
-      setCurrentSheet(result.currentSheet)
-      setHeaders(result.headers)
-      setTotalRows(result.totalRows)
-      
-      // 恢复目标 Sheet 的筛选状态
-      const savedFilters = sheetFilters[sheetName] || {}
-      const savedIndices = sheetIndices[sheetName]
-      
-      setFilters(savedFilters)
-      
-      if (Object.keys(savedFilters).length > 0 && savedIndices) {
-        // 重新应用已保存的筛选
-        const filterResult = await applyFilter(savedFilters)
-        setFilteredIndices(filterResult.indices)
-        setStatus({ 
-          type: 'success', 
-          message: `已切换到 ${sheetName}，显示 ${filterResult.indices.length.toLocaleString()} / ${result.totalRows.toLocaleString()} 行` 
-        })
-      } else {
-        setFilteredIndices(result.indices)
-        setStatus({ type: 'success', message: `已切换到 ${sheetName}，共 ${result.totalRows.toLocaleString()} 行` })
-      }
-    } catch (error) {
-      setStatus({ type: 'error', message: `切换失败: ${error.message}` })
-    }
-  }, [currentSheet, switchSheet, filters, filteredIndices, sheetFilters, sheetIndices, applyFilter])
+      if (!dir) { setSortState({ columnIndex: null, direction: null }); const r = await w.applyFilter(filters); setFilteredIndices(r.indices); setStatus({ type: 'success', message: '已还原排序' }) }
+      else { setSortState({ columnIndex: ci, direction: dir }); const r = await w.sortData(ci, dir, filters); setFilteredIndices(r.indices); setStatus({ type: 'success', message: `已按 ${headers[ci]} ${dir === 'asc' ? '升序' : '降序'}` }) }
+    } catch (e) { setStatus({ type: 'error', message: e.message }) }
+  }, [w, filters, headers])
 
+  // ========================== EDIT ==========================
+  const handleCellEdit = useCallback(async (ri, ci, val) => {
+    try {
+      const r = await w.updateCell(ri, ci, val)
+      if (r.changed) { setEditState(p => ({ ...p, canUndo: r.canUndo, canRedo: r.canRedo, isModified: true, historySize: r.historySize })); setStatus({ type: 'success', message: `已更新 [行${ri + 1}, ${headers[ci]}]` }) }
+      return r
+    } catch (e) { setStatus({ type: 'error', message: e.message }); return { changed: false } }
+  }, [w, headers])
+
+  const handleUndo = useCallback(async () => {
+    if (!editState.canUndo) return
+    try {
+      const r = await w.undoEdit()
+      if (r.success) { setEditState(p => ({ ...p, canUndo: r.canUndo, canRedo: r.canRedo, isModified: r.canUndo })); if (r.headers) setHeaders(r.headers); if (r.totalRows !== undefined) setTotalRows(r.totalRows); if (r.indices) setFilteredIndices(r.indices); setStatus({ type: 'success', message: '已撤销' }) }
+    } catch (e) { setStatus({ type: 'error', message: e.message }) }
+  }, [w, editState.canUndo])
+
+  const handleRedo = useCallback(async () => {
+    if (!editState.canRedo) return
+    try {
+      const r = await w.redoEdit()
+      if (r.success) { setEditState(p => ({ ...p, canUndo: r.canUndo, canRedo: r.canRedo, isModified: true })); if (r.headers) setHeaders(r.headers); if (r.totalRows !== undefined) setTotalRows(r.totalRows); if (r.indices) setFilteredIndices(r.indices); setStatus({ type: 'success', message: '已重做' }) }
+    } catch (e) { setStatus({ type: 'error', message: e.message }) }
+  }, [w, editState.canRedo])
+
+  // ========================== SEARCH ==========================
+  const handleSearch = useCallback(async (term, opts) => {
+    if (!term) { setSearchResults(null); setSearchHighlights([]); setCurrentSearchIndex(0); return }
+    try { const r = await w.searchData(term, opts); setSearchResults(r); setSearchHighlights(r.matches || []); setCurrentSearchIndex(0) }
+    catch (e) { setStatus({ type: 'error', message: e.message }) }
+  }, [w])
+
+  const handleSearchNavigate = useCallback((d) => {
+    if (!searchResults?.total) return
+    setCurrentSearchIndex(p => d === 'next' ? (p + 1) % searchResults.total : (p === 0 ? searchResults.total - 1 : p - 1))
+  }, [searchResults])
+
+  const handleFindReplace = useCallback(async (s, r, opts) => {
+    try {
+      const res = await w.findReplace(s, r, opts)
+      if (res.replaced > 0) { markModified(); setStatus({ type: 'success', message: `已替换 ${res.replaced} 处` }); handleSearch(s, opts) }
+      else setStatus({ type: 'success', message: '无匹配' })
+    } catch (e) { setStatus({ type: 'error', message: e.message }) }
+  }, [w, handleSearch, markModified])
+
+  // ========================== ROW/COL OPS ==========================
+  const handleAddRowAbove = useCallback(async (ri) => { const r = await w.addRow(ri); setTotalRows(r.totalRows); setFilteredIndices(r.indices); markModified(); setStatus({ type: 'success', message: '已插入行' }) }, [w, markModified])
+  const handleAddRowBelow = useCallback(async (ri) => { const r = await w.addRow(ri + 1); setTotalRows(r.totalRows); setFilteredIndices(r.indices); markModified(); setStatus({ type: 'success', message: '已插入行' }) }, [w, markModified])
+  const handleDeleteRow = useCallback(async (ri) => { const r = await w.deleteRows([ri]); setTotalRows(r.totalRows); setFilteredIndices(r.indices); markModified(); setStatus({ type: 'success', message: '已删除行' }) }, [w, markModified])
+  const handleDuplicateRow = useCallback(async (ri) => { const r = await w.duplicateRow(ri); setTotalRows(r.totalRows); setFilteredIndices(r.indices); markModified(); setStatus({ type: 'success', message: '已复制行' }) }, [w, markModified])
+  const handleAddColumnLeft = useCallback(async (ci) => { const r = await w.addColumn(ci); setHeaders(r.headers); markModified(); setStatus({ type: 'success', message: '已插入列' }) }, [w, markModified])
+  const handleAddColumnRight = useCallback(async (ci) => { const r = await w.addColumn(ci + 1); setHeaders(r.headers); markModified(); setStatus({ type: 'success', message: '已插入列' }) }, [w, markModified])
+  const handleDeleteColumn = useCallback(async (ci) => { const r = await w.deleteColumn(ci); setHeaders(r.headers); markModified(); setStatus({ type: 'success', message: '已删除列' }) }, [w, markModified])
+
+  const handleCopyCell = useCallback(async (ri, ci) => {
+    try { const r = await w.getRows([ri], 0, 1); const v = r.rows[0]?.data?.[ci]; await navigator.clipboard.writeText(v == null ? '' : String(v)); setStatus({ type: 'success', message: '已复制' }) }
+    catch (e) { setStatus({ type: 'error', message: e.message }) }
+  }, [w])
+
+  const handlePasteCell = useCallback(async (ri, ci) => {
+    try {
+      const text = await navigator.clipboard.readText()
+      const lines = text.split('\n').filter(Boolean)
+      if (lines.length > 1 || lines[0]?.includes('\t')) {
+        for (let r = 0; r < lines.length; r++) { const cols = lines[r].split('\t'); for (let c = 0; c < cols.length; c++) { if (ri + r < totalRows && ci + c < headers.length) await w.updateCell(ri + r, ci + c, cols[c]) } }
+        markModified(); setStatus({ type: 'success', message: `已粘贴 ${lines.length} 行` })
+      } else { await handleCellEdit(ri, ci, text) }
+    } catch (e) { setStatus({ type: 'error', message: e.message }) }
+  }, [w, handleCellEdit, totalRows, headers.length, markModified])
+
+  // ========================== STATS / ANALYSIS ==========================
+  const handleShowColumnStats = useCallback(async (ci) => { try { setColumnStats({ isOpen: true, stats: await w.getColumnStats(ci) }) } catch (e) { setStatus({ type: 'error', message: e.message }) } }, [w])
+  const handleShowBatchOps = useCallback((ci) => setBatchOps({ isOpen: true, columnIndex: ci, columnName: headers[ci] }), [headers])
+
+  const handleBatchTransform = useCallback(async (ci, tt, opts) => {
+    try { const r = await w.batchTransform(ci, tt, opts); if (r.transformed > 0) { markModified(); setStatus({ type: 'success', message: `已变换 ${r.transformed} 个` }) } else setStatus({ type: 'success', message: '无变化' }) }
+    catch (e) { setStatus({ type: 'error', message: e.message }) }
+  }, [w, markModified])
+
+  const handleFindDuplicates = useCallback(async () => {
+    try { const r = await w.findDuplicates(); setDuplicateHighlights(r.duplicateIndices || []); setStatus({ type: 'success', message: r.totalDuplicateRows > 0 ? `${r.totalDuplicateGroups} 组重复 (${r.totalDuplicateRows} 行)` : '无重复' }) }
+    catch (e) { setStatus({ type: 'error', message: e.message }) }
+  }, [w])
+
+  const handleAutoFitWidths = useCallback(async () => {
+    try { const r = await w.autoFitWidths(); const m = {}; r.widths.forEach((v, i) => { m[i] = v }); setColumnWidths(m); setStatus({ type: 'success', message: '列宽已调整' }) }
+    catch (e) { setStatus({ type: 'error', message: e.message }) }
+  }, [w])
+
+  // ========================== ADVANCED ACTIONS ==========================
+  const handleAdvancedAction = useCallback((actionId) => {
+    switch (actionId) {
+      case 'removeDuplicates': handleRemoveDuplicates(); break
+      case 'removeEmptyRows': handleRemoveEmptyRows(); break
+      case 'conditionalDelete': setActiveDialog('conditionalDelete'); break
+      case 'splitColumn': setActiveDialog('splitColumn'); break
+      case 'mergeColumns': setActiveDialog('mergeColumns'); break
+      case 'regexExtract': setActiveDialog('regexExtract'); break
+      case 'formatNumbers': setActiveDialog('numberFormat'); break
+      case 'convertDate': setActiveDialog('dateFormat'); break
+      case 'transpose': handleTranspose(); break
+      case 'vlookup': setActiveDialog('vlookup'); break
+      case 'exportJson': setActiveDialog('exportJson'); break
+      case 'exportSelective': setActiveDialog('exportSelective'); break
+      default: break
+    }
+  }, [])
+
+  const handleRemoveDuplicates = useCallback(async () => {
+    try { setStatus({ type: 'loading', message: '正在去重...' }); const r = await w.removeDuplicates(); setTotalRows(r.totalRows); setFilteredIndices(r.indices); markModified(); setDuplicateHighlights([]); setStatus({ type: 'success', message: r.removed > 0 ? `已删除 ${r.removed} 个重复行` : '无重复行' }) }
+    catch (e) { setStatus({ type: 'error', message: e.message }) }
+  }, [w, markModified])
+
+  const handleRemoveEmptyRows = useCallback(async () => {
+    try { setStatus({ type: 'loading', message: '正在清除空行...' }); const r = await w.removeEmptyRows(); setTotalRows(r.totalRows); setFilteredIndices(r.indices); markModified(); setStatus({ type: 'success', message: r.removed > 0 ? `已清除 ${r.removed} 个空行` : '无空行' }) }
+    catch (e) { setStatus({ type: 'error', message: e.message }) }
+  }, [w, markModified])
+
+  const handleConditionalDelete = useCallback(async (ci, cond, val) => {
+    try { const r = await w.conditionalDelete(ci, cond, val); setTotalRows(r.totalRows); setFilteredIndices(r.indices); markModified(); setStatus({ type: 'success', message: `已删除 ${r.removed} 行` }) }
+    catch (e) { setStatus({ type: 'error', message: e.message }) }
+  }, [w, markModified])
+
+  const handleSplitColumn = useCallback(async (ci, delim) => {
+    try { const r = await w.splitColumn(ci, delim); setHeaders(r.headers); setStatus({ type: 'success', message: `已拆分为 ${r.splitCount} 列` }) }
+    catch (e) { setStatus({ type: 'error', message: e.message }) }
+  }, [w])
+
+  const handleMergeColumns = useCallback(async (cols, sep, name) => {
+    try { const r = await w.mergeColumns(cols, sep, name); setHeaders(r.headers); setStatus({ type: 'success', message: '已合并列' }) }
+    catch (e) { setStatus({ type: 'error', message: e.message }) }
+  }, [w])
+
+  const handleRegexExtract = useCallback(async (ci, pattern, name) => {
+    try { const r = await w.regexExtract(ci, pattern, name); setHeaders(r.headers); setStatus({ type: 'success', message: '已提取新列' }) }
+    catch (e) { setStatus({ type: 'error', message: e.message }) }
+  }, [w])
+
+  const handleTranspose = useCallback(async () => {
+    try { setStatus({ type: 'loading', message: '正在转置...' }); const r = await w.transpose(); setHeaders(r.headers); setTotalRows(r.totalRows); setFilteredIndices(r.indices); setStatus({ type: 'success', message: '已完成行列转置' }) }
+    catch (e) { setStatus({ type: 'error', message: e.message }) }
+  }, [w])
+
+  const handleVlookup = useCallback(async (file, keyCol, lkCol, lvCol) => {
+    try { setStatus({ type: 'loading', message: '正在匹配...' }); const r = await w.vlookup(file, keyCol, lkCol, lvCol); setHeaders(r.headers); setStatus({ type: 'success', message: `匹配完成，${r.matchCount} 个匹配` }) }
+    catch (e) { setStatus({ type: 'error', message: e.message }) }
+  }, [w])
+
+  const handleNumberFormat = useCallback(async (ci, ft, opts) => {
+    try { const r = await w.formatNumbers(ci, ft, opts); markModified(); setStatus({ type: 'success', message: `已格式化 ${r.formatted} 个` }) }
+    catch (e) { setStatus({ type: 'error', message: e.message }) }
+  }, [w, markModified])
+
+  const handleDateFormat = useCallback(async (ci, from, to) => {
+    try { const r = await w.convertDateFormat(ci, from, to); markModified(); setStatus({ type: 'success', message: `已转换 ${r.converted} 个日期` }) }
+    catch (e) { setStatus({ type: 'error', message: e.message }) }
+  }, [w, markModified])
+
+  const handleExportJson = useCallback(async (format) => {
+    try { setStatus({ type: 'loading', message: '正在导出 JSON...' }); const r = await w.exportAsJson(filteredIndices, format); downloadBlob(r.blobUrl, `export_${Date.now()}.${r.ext}`); setStatus({ type: 'success', message: '已导出 JSON' }) }
+    catch (e) { setStatus({ type: 'error', message: e.message }) }
+  }, [w, filteredIndices, downloadBlob])
+
+  const handleExportSelective = useCallback(async (format, colIndices) => {
+    try {
+      setStatus({ type: 'loading', message: '正在导出...' })
+      const r = await w.exportSelective(format, filteredIndices, colIndices)
+      const ext = r.ext || format
+      downloadBlob(r.blobUrl, `export_${Date.now()}.${ext}`)
+      setStatus({ type: 'success', message: '已导出' })
+    } catch (e) { setStatus({ type: 'error', message: e.message }) }
+  }, [w, filteredIndices, downloadBlob])
+
+  // ========================== EXPORT / CLEAR / SHEET ==========================
+  const handleExport = useCallback(async (format) => {
+    try { setStatus({ type: 'loading', message: `正在导出...` }); const r = await w.exportFile(format, filteredIndices); downloadBlob(r.blobUrl, `export_${Date.now()}.${format}`); setStatus({ type: 'success', message: `已导出 ${filteredIndices.length.toLocaleString()} 行` }) }
+    catch (e) { setStatus({ type: 'error', message: e.message }) }
+  }, [w, filteredIndices, downloadBlob])
+
+  const handleClear = useCallback(() => {
+    w.cleanup(); setFileInfo(null); setSheetNames([]); setCurrentSheet(null); setHeaders([]); setTotalRows(0); setFilteredIndices([]); setFilters({}); setSheetFilters({}); setSheetIndices({})
+    setSortState({ columnIndex: null, direction: null }); setEditState({ canUndo: false, canRedo: false, isModified: false, historySize: 0 })
+    setColumnWidths({}); setFrozenColumns(new Set()); setHiddenColumns(new Set()); setDuplicateHighlights([]); setSearchHighlights([]); setSearchResults(null); setSearchOpen(false); setStatus({ type: 'idle', message: '' })
+  }, [w])
+
+  const handleSwitchSheet = useCallback(async (name) => {
+    if (name === currentSheet) return
+    if (currentSheet) { setSheetFilters(p => ({ ...p, [currentSheet]: filters })); setSheetIndices(p => ({ ...p, [currentSheet]: filteredIndices })) }
+    setStatus({ type: 'loading', message: `切换到 ${name}...` })
+    try {
+      const r = await w.switchSheet(name); setCurrentSheet(r.currentSheet); setHeaders(r.headers); setTotalRows(r.totalRows); setSortState({ columnIndex: null, direction: null }); setDuplicateHighlights([])
+      const sf = sheetFilters[name] || {}; setFilters(sf)
+      if (Object.keys(sf).length > 0) { const fr = await w.applyFilter(sf); setFilteredIndices(fr.indices); setStatus({ type: 'success', message: `${name}: ${fr.indices.length}/${r.totalRows} 行` }) }
+      else { setFilteredIndices(r.indices); setStatus({ type: 'success', message: `${name}: ${r.totalRows} 行` }) }
+    } catch (e) { setStatus({ type: 'error', message: e.message }) }
+  }, [currentSheet, w, filters, filteredIndices, sheetFilters, sheetIndices])
+
+  // ========================== RENDER ==========================
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 flex flex-col">
-      {/* 顶部导航 */}
       <nav className="bg-emerald-600 dark:bg-emerald-800 text-white px-4 py-2">
         <div className="max-w-full mx-auto flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-            <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-sm">
-              E
-            </div>
+          <Link to="/" onClick={(e) => confirmLeave(e, '/')} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+            <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-sm">E</div>
             <span className="text-sm font-medium">工具集</span>
           </Link>
           <div className="flex items-center gap-3">
-            <Link to="/" className="text-white/80 hover:text-white text-sm transition-colors">
-              返回首页
-            </Link>
-            <a
-              href="https://github.com/EarthChen/web-tools"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-white/80 hover:text-white transition-colors"
-            >
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
-              </svg>
+            <Link to="/" onClick={(e) => confirmLeave(e, '/')} className="text-white/80 hover:text-white text-sm">返回首页</Link>
+            <a href="https://github.com/EarthChen/web-tools" target="_blank" rel="noopener noreferrer" className="text-white/80 hover:text-white">
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" /></svg>
             </a>
           </div>
         </div>
       </nav>
-      
-      {/* 工具栏 */}
-      <Header 
-        fileInfo={fileInfo}
-        totalRows={totalRows}
-        filteredCount={filteredIndices.length}
-        sheetNames={sheetNames}
-        currentSheet={currentSheet}
-        onSwitchSheet={handleSwitchSheet}
-        onExport={handleExport}
-        onClear={handleClear}
+
+      <Header
+        fileInfo={fileInfo} totalRows={totalRows} filteredCount={filteredIndices.length}
+        sheetNames={sheetNames} currentSheet={currentSheet} onSwitchSheet={handleSwitchSheet}
+        onExport={handleExport} onClear={handleClear} editState={editState} onUndo={handleUndo} onRedo={handleRedo}
+        onSearch={() => setSearchOpen(true)} onFindDuplicates={handleFindDuplicates} onClearDuplicates={() => setDuplicateHighlights([])}
+        hasDuplicates={duplicateHighlights.length > 0} onAutoFitWidths={handleAutoFitWidths} onAppendFile={handleAppendFile}
+        frozenColumns={frozenColumns} onFrozenColumnsChange={setFrozenColumns} headers={headers}
+        hiddenColumns={hiddenColumns} onShowColumn={handleShowColumn} onShowAllColumns={handleShowAllColumns}
+        onAdvancedAction={handleAdvancedAction}
       />
-      
-      {/* 筛选条件标签 */}
+
+      <SearchBar isOpen={searchOpen} onClose={() => { setSearchOpen(false); setSearchHighlights([]); setSearchResults(null) }}
+        onSearch={handleSearch} onFindReplace={handleFindReplace} searchResults={searchResults} currentIndex={currentSearchIndex} onNavigate={handleSearchNavigate} />
+
       {fileInfo && Object.keys(filters).length > 0 && (
-        <FilterTags
-          filters={filters}
-          headers={headers}
-          onRemoveFilter={handleRemoveFilter}
-          onClearAll={handleClearAllFilters}
-        />
+        <FilterTags filters={filters} headers={headers} onRemoveFilter={handleRemoveFilter} onClearAll={handleClearAllFilters} />
       )}
-      
-      {/* 主内容区 */}
+
       <main className="flex-1 flex flex-col p-4 overflow-hidden">
         {!fileInfo ? (
-          <FileUploader 
-            onFileSelect={handleFileUpload}
-            progress={uploadProgress}
-            isLoading={status.type === 'loading'}
-          />
+          <FileUploader onFileSelect={handleFileUpload} progress={uploadProgress} isLoading={status.type === 'loading'} />
         ) : (
-          <VirtualTable
-            headers={headers}
-            filteredIndices={filteredIndices}
-            filters={filters}
-            getRows={getRows}
-            onFilterChange={handleFilterChange}
-            onGetUniqueValues={handleGetUniqueValues}
-          />
+          <VirtualTable headers={headers} filteredIndices={filteredIndices} filters={filters} getRows={w.getRows}
+            onFilterChange={handleFilterChange} onGetUniqueValues={handleGetUniqueValues}
+            sortState={sortState} onSort={handleSort} onCellEdit={handleCellEdit}
+            columnWidths={columnWidths} onColumnWidthsChange={setColumnWidths}
+            searchHighlights={searchHighlights} currentSearchIndex={currentSearchIndex}
+            duplicateHighlights={duplicateHighlights} selectedCells={selectedCells} onSelectedCellsChange={setSelectedCells}
+            onContextMenu={(e, info) => setContextMenu({ isOpen: true, position: { x: e.clientX, y: e.clientY }, cellInfo: info })}
+            frozenColumns={frozenColumns} hiddenColumns={hiddenColumns} />
         )}
       </main>
-      
-      {/* 底部状态栏 */}
+
       <StatusBar status={status} />
-      
-      {/* 广告区域 */}
-      <div className="p-4 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-200 dark:border-gray-700">
-        <InlineAd />
-      </div>
+      <div className="p-4 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-200 dark:border-gray-700"><InlineAd /></div>
+
+      {/* Overlays */}
+      <ContextMenu isOpen={contextMenu.isOpen} position={contextMenu.position} cellInfo={contextMenu.cellInfo}
+        onClose={() => setContextMenu(p => ({ ...p, isOpen: false }))}
+        onAddRowAbove={handleAddRowAbove} onAddRowBelow={handleAddRowBelow} onDeleteRow={handleDeleteRow} onDuplicateRow={handleDuplicateRow}
+        onAddColumnLeft={handleAddColumnLeft} onAddColumnRight={handleAddColumnRight} onDeleteColumn={handleDeleteColumn}
+        onCopyCell={handleCopyCell} onPasteCell={handlePasteCell} onShowColumnStats={handleShowColumnStats} onShowBatchOps={handleShowBatchOps}
+        onHideColumn={handleHideColumn} />
+
+      <ColumnStatsPopover isOpen={columnStats.isOpen} stats={columnStats.stats} onClose={() => setColumnStats({ isOpen: false, stats: null })} />
+      <BatchOperationsDialog isOpen={batchOps.isOpen} columnIndex={batchOps.columnIndex} columnName={batchOps.columnName}
+        onClose={() => setBatchOps({ isOpen: false, columnIndex: null, columnName: '' })} onApply={handleBatchTransform} />
+
+      {/* Advanced Dialogs */}
+      <ConditionalDeleteDialog isOpen={activeDialog === 'conditionalDelete'} onClose={() => setActiveDialog(null)} headers={headers} onApply={handleConditionalDelete} />
+      <SplitColumnDialog isOpen={activeDialog === 'splitColumn'} onClose={() => setActiveDialog(null)} headers={headers} onApply={handleSplitColumn} />
+      <MergeColumnsDialog isOpen={activeDialog === 'mergeColumns'} onClose={() => setActiveDialog(null)} headers={headers} onApply={handleMergeColumns} />
+      <RegexExtractDialog isOpen={activeDialog === 'regexExtract'} onClose={() => setActiveDialog(null)} headers={headers} onApply={handleRegexExtract} />
+      <VLookupDialog isOpen={activeDialog === 'vlookup'} onClose={() => setActiveDialog(null)} headers={headers} onApply={handleVlookup} />
+      <NumberFormatDialog isOpen={activeDialog === 'numberFormat'} onClose={() => setActiveDialog(null)} headers={headers} onApply={handleNumberFormat} />
+      <DateFormatDialog isOpen={activeDialog === 'dateFormat'} onClose={() => setActiveDialog(null)} headers={headers} onApply={handleDateFormat} />
+      <ExportSelectiveDialog isOpen={activeDialog === 'exportSelective'} onClose={() => setActiveDialog(null)} headers={headers} onApply={handleExportSelective} />
+      <JsonExportDialog isOpen={activeDialog === 'exportJson'} onClose={() => setActiveDialog(null)} onApply={handleExportJson} />
     </div>
   )
 }

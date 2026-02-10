@@ -10,6 +10,7 @@ export default function FilterPopover({
   onClose,
   onGetUniqueValues,
   anchorRef,
+  anchorEl, // direct DOM element reference (preferred over anchorRef)
 }) {
   const [values, setValues] = useState([])
   const [selectedValues, setSelectedValues] = useState(new Set(currentFilter || []))
@@ -20,16 +21,18 @@ export default function FilterPopover({
   const popoverRef = useRef(null)
   const searchTimeoutRef = useRef(null)
 
-  // 计算弹窗位置
+  // 计算弹窗位置 - 只在挂载时计算一次
   useEffect(() => {
-    if (anchorRef?.current) {
-      const rect = anchorRef.current.getBoundingClientRect()
+    const el = anchorEl || anchorRef?.current
+    if (el) {
+      const rect = el.getBoundingClientRect()
       setPosition({
         top: rect.bottom + 4,
         left: Math.max(8, Math.min(rect.left, window.innerWidth - 300)),
       })
     }
-  }, [anchorRef])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Run once on mount; anchor position is stable when popover opens
 
   // 加载唯一值
   const loadValues = useCallback(async (search = '') => {

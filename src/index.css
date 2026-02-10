@@ -1,8 +1,8 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
 :root {
   font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
@@ -90,8 +90,55 @@ body {
   @apply px-3 py-2 text-sm text-gray-800 dark:text-gray-200 border-r border-gray-200 dark:border-gray-700 truncate;
 }
 
+.table-cell:hover {
+  @apply bg-emerald-50/50 dark:bg-emerald-900/10;
+}
+
+.table-cell.cell-empty {
+  background-image: repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(239, 68, 68, 0.04) 3px, rgba(239, 68, 68, 0.04) 6px);
+}
+
+.table-cell.cell-search-highlight {
+  @apply bg-yellow-100 dark:bg-yellow-900/30;
+}
+
+.table-cell.cell-search-current {
+  @apply bg-orange-200 dark:bg-orange-800/50 ring-2 ring-orange-400 ring-inset;
+}
+
+.table-cell.cell-selected {
+  @apply bg-blue-100/60 dark:bg-blue-900/20;
+}
+
+.table-cell.cell-active {
+  @apply ring-2 ring-emerald-500 ring-inset;
+}
+
 .table-header-cell {
   @apply px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 border-r border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800;
+}
+
+.table-header-cell:hover {
+  @apply bg-gray-100 dark:bg-gray-700/80;
+}
+
+/* Animations */
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.animate-slideDown {
+  animation: slideDown 0.15s ease-out forwards;
+}
+
+.animate-scaleIn {
+  animation: scaleIn 0.1s ease-out forwards;
 }
 
 /* JSON 工具样式 */

@@ -36,8 +36,9 @@ export default function FileUploader({ onFileSelect, progress, isLoading }) {
       'text/csv',
       'application/vnd.ms-excel',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/json',
     ]
-    const validExtensions = ['.csv', '.xls', '.xlsx']
+    const validExtensions = ['.csv', '.xls', '.xlsx', '.json', '.jsonl', '.ndjson']
     
     return validTypes.includes(file.type) || 
            validExtensions.some(ext => file.name.toLowerCase().endsWith(ext))
@@ -69,7 +70,7 @@ export default function FileUploader({ onFileSelect, progress, isLoading }) {
         <input
           id="file-input"
           type="file"
-          accept=".csv,.xls,.xlsx"
+          accept=".csv,.xls,.xlsx,.json,.jsonl,.ndjson"
           onChange={handleFileChange}
           className="hidden"
         />
@@ -119,6 +120,7 @@ export default function FileUploader({ onFileSelect, progress, isLoading }) {
                 <span className="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full">CSV</span>
                 <span className="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full">XLS</span>
                 <span className="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full">XLSX</span>
+                <span className="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full">JSON</span>
               </div>
               
               <p className="text-xs text-gray-400 dark:text-gray-500 mt-6">
