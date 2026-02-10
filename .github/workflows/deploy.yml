@@ -18,7 +18,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout web-tools
         uses: actions/checkout@v4
 
       - name: Setup pnpm
@@ -35,8 +35,30 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Build
+      - name: Build web-tools
         run: pnpm build
+
+      # --- Build photo-tools (from private repo) ---
+      - name: Checkout photo-tools
+        uses: actions/checkout@v4
+        with:
+          repository: EarthChen/photo-tools
+          token: ${{ secrets.PHOTO_TOOLS_TOKEN }}
+          path: _photo-tools
+
+      - name: Install photo-tools dependencies
+        run: pnpm install
+        working-directory: _photo-tools
+
+      - name: Build photo-tools
+        run: pnpm exec vite build --base=/web-tools/photo-tools/
+        working-directory: _photo-tools/web
+
+      # --- Combine both build outputs ---
+      - name: Merge photo-tools into web-tools dist
+        run: |
+          mkdir -p dist/photo-tools
+          cp -r _photo-tools/web/dist/* dist/photo-tools/
 
       - name: Create .nojekyll
         run: touch dist/.nojekyll
