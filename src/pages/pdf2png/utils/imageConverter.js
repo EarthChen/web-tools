@@ -42,6 +42,8 @@ function fileToDataUrl(file) {
  * @param {string} options.orientation - 页面方向 ('auto' | 'portrait' | 'landscape')
  * @param {number} options.margin - 页边距 (mm)
  * @param {number} options.quality - 图片质量 (0-1)
+ * @param {string} options.watermarkText - 水印文字
+ * @param {number[]} options.rotations - 每张图片的旋转角度数组 (0/90/180/270)
  * @param {Function} onProgress - 进度回调
  * @returns {Promise<{blob: Blob, filename: string}>}
  */
@@ -55,6 +57,8 @@ export async function convertImagesToPdf(
     orientation = 'auto',
     margin = 10,
     quality = 0.92,
+    watermarkText = '',
+    rotations = [],
   } = options
 
   // 预定义页面尺寸 (mm)
@@ -70,8 +74,27 @@ export async function convertImagesToPdf(
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i]
-    const { img, width, height } = await loadImage(file)
-    const dataUrl = await fileToDataUrl(file)
+    const { img, width: origWidth, height: origHeight } = await loadImage(file)
+    let dataUrl = await fileToDataUrl(file)
+
+    // Apply rotation if needed
+    const rot = rotations[i] || 0
+    let width = origWidth
+    let height = origHeight
+    if (rot === 90 || rot === 270) {
+      width = origHeight
+      height = origWidth
+    }
+    if (rot !== 0) {
+      const canvas = document.createElement('canvas')
+      canvas.width = width
+      canvas.height = height
+      const ctx = canvas.getContext('2d')
+      ctx.translate(width / 2, height / 2)
+      ctx.rotate((rot * Math.PI) / 180)
+      ctx.drawImage(img, -origWidth / 2, -origHeight / 2)
+      dataUrl = canvas.toDataURL(file.type === 'image/png' ? 'image/png' : 'image/jpeg', quality)
+    }
 
     // 确定页面方向
     let pageOrientation = orientation
@@ -139,6 +162,11 @@ export async function convertImagesToPdf(
     // 添加图片到 PDF
     pdf.addImage(dataUrl, format, imgX, imgY, imgWidth, imgHeight, undefined, 'MEDIUM')
 
+    // Apply watermark to the PDF page
+    if (watermarkText) {
+      applyPdfWatermark(pdf, pageWidth, pageHeight, watermarkText)
+    }
+
     // 释放图片资源
     URL.revokeObjectURL(img.src)
 
@@ -182,4 +210,21 @@ export function cleanupPreviews(previews) {
       URL.revokeObjectURL(item.preview)
     }
   }
+}
+
+/**
+ * Apply diagonal repeating text watermark to a jsPDF page
+ */
+function applyPdfWatermark(pdf, pageWidth, pageHeight, text) {
+  pdf.setGState(new pdf.GState({ opacity: 0.12 }))
+  pdf.setTextColor(128, 128, 128)
+  const fontSize = Math.max(10, Math.min(pageWidth, pageHeight) / 15)
+  pdf.setFontSize(fontSize)
+  const gap = fontSize * 4
+  for (let y = -pageHeight; y < pageHeight * 2; y += gap) {
+    for (let x = -pageWidth; x < pageWidth * 2; x += gap) {
+      pdf.text(text, x, y, { angle: 30 })
+    }
+  }
+  pdf.setGState(new pdf.GState({ opacity: 1 }))
 }

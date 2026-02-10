@@ -8,6 +8,7 @@ function Toolbar({
   onEscape,
   onUnescape,
   onRepair,
+  onStripComments,
   indentSize,
   onIndentSizeChange,
   compareMode,
@@ -102,6 +103,13 @@ function Toolbar({
         className="px-3 py-2 bg-white/20 text-white rounded-lg text-sm font-medium hover:bg-white/30 transition-colors"
       >
         尝试修复
+      </button>
+      <button
+        onClick={onStripComments}
+        className="px-3 py-2 bg-white/20 text-white rounded-lg text-sm font-medium hover:bg-white/30 transition-colors"
+        title="移除 JSONC 中的 // 和 /* */ 注释及尾部逗号"
+      >
+        去注释
       </button>
 
       {/* 对比模式按钮 */}

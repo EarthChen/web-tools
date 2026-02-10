@@ -145,6 +145,64 @@ export function unescapeJson(input) {
   }
 }
 
+// Strip JSONC comments (single-line // and multi-line block comments)
+export function stripComments(input, indentSize = 2) {
+  try {
+    let result = ''
+    let i = 0
+    let inString = false
+    let escaped = false
+
+    while (i < input.length) {
+      const ch = input[i]
+      const next = input[i + 1]
+
+      if (inString) {
+        result += ch
+        if (escaped) {
+          escaped = false
+        } else if (ch === '\\') {
+          escaped = true
+        } else if (ch === '"') {
+          inString = false
+        }
+        i++
+        continue
+      }
+
+      // Not inside a string
+      if (ch === '"') {
+        inString = true
+        result += ch
+        i++
+      } else if (ch === '/' && next === '/') {
+        // Single line comment - skip until newline
+        i += 2
+        while (i < input.length && input[i] !== '\n') i++
+      } else if (ch === '/' && next === '*') {
+        // Multi-line comment - skip until */
+        i += 2
+        while (i < input.length && !(input[i] === '*' && input[i + 1] === '/')) i++
+        i += 2 // skip */
+      } else {
+        result += ch
+        i++
+      }
+    }
+
+    // Also strip trailing commas before } or ]
+    result = result.replace(/,(\s*[}\]])/g, '$1')
+
+    // Try to parse and reformat
+    const parsed = JSON.parse(result)
+    const indent = indentSize === 1 ? '\t' : ' '.repeat(indentSize)
+    const output = JSON.stringify(parsed, null, indent)
+    return { output, error: null }
+  } catch (e) {
+    return { output: '', error: `去注释失败: ${e.message}` }
+  }
+}
+
 /**
  * 尝试修复不规范的 JSON
  */

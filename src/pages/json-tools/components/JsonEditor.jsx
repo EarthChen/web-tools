@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 
 // 括号配对映射
 const BRACKET_PAIRS = {
@@ -12,6 +12,7 @@ const CLOSING_BRACKETS = new Set(['}', ']', '"'])
 
 function JsonEditor({ value, onChange, placeholder, readOnly = false }) {
   const textareaRef = useRef(null)
+  const [isDragOver, setIsDragOver] = useState(false)
 
   // 自动调整高度
   useEffect(() => {
@@ -24,6 +25,45 @@ function JsonEditor({ value, onChange, placeholder, readOnly = false }) {
     const newHeight = Math.min(Math.max(textarea.scrollHeight, 300), 800)
     textarea.style.height = `${newHeight}px`
   }, [value])
+
+  // Drag & Drop handlers
+  const handleDragEnter = useCallback((e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!readOnly) setIsDragOver(true)
+  }, [readOnly])
+
+  const handleDragOver = useCallback((e) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }, [])
+
+  const handleDragLeave = useCallback((e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(false)
+  }, [])
+
+  const handleDrop = useCallback((e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(false)
+    if (readOnly) return
+
+    const files = e.dataTransfer?.files
+    if (files && files.length > 0) {
+      const file = files[0]
+      // Accept .json, .jsonc, .jsonl, .txt, or text/* types
+      if (file.name.match(/\.(json|jsonc|jsonl|ndjson|txt|geojson)$/i) || file.type.startsWith('text/') || file.type === 'application/json') {
+        const reader = new FileReader()
+        reader.onload = (ev) => {
+          const text = ev.target?.result
+          if (text) onChange?.(text)
+        }
+        reader.readAsText(file)
+      }
+    }
+  }, [readOnly, onChange])
 
   // 处理键盘输入，实现括号自动补全
   const handleKeyDown = useCallback((e) => {
@@ -152,16 +192,31 @@ function JsonEditor({ value, onChange, placeholder, readOnly = false }) {
   }, [onChange, readOnly])
 
   return (
-    <textarea
-      ref={textareaRef}
-      className="w-full min-h-[300px] max-h-[800px] bg-white/10 rounded-lg p-4 text-white font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-white/30 placeholder-white/40 json-editor"
-      value={value}
-      onChange={(e) => onChange?.(e.target.value)}
-      onKeyDown={handleKeyDown}
-      placeholder={placeholder}
-      readOnly={readOnly}
-      spellCheck={false}
-    />
+    <div
+      className={`relative rounded-lg transition-all ${isDragOver ? 'ring-2 ring-blue-400 ring-offset-2 ring-offset-transparent' : ''}`}
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      <textarea
+        ref={textareaRef}
+        className="w-full min-h-[300px] max-h-[800px] bg-white/10 rounded-lg p-4 text-white font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-white/30 placeholder-white/40 json-editor"
+        value={value}
+        onChange={(e) => onChange?.(e.target.value)}
+        onKeyDown={handleKeyDown}
+        placeholder={placeholder || '在此粘贴、输入 JSON 或拖拽文件到此处...'}
+        readOnly={readOnly}
+        spellCheck={false}
+      />
+      {isDragOver && (
+        <div className="absolute inset-0 bg-blue-500/20 rounded-lg flex items-center justify-center pointer-events-none z-10">
+          <div className="bg-blue-600/90 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg">
+            释放以导入 JSON 文件
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
