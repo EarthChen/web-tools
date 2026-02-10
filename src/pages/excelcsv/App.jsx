@@ -117,6 +117,33 @@ function App() {
     return () => window.removeEventListener('beforeunload', h)
   }, [fileInfo])
 
+  // Block browser back/forward navigation (popstate) when file is loaded
+  useEffect(() => {
+    if (!fileInfo) return
+    // Push a guard entry so pressing back triggers popstate instead of leaving
+    window.history.pushState({ excelGuard: true }, '')
+    const handlePopState = (e) => {
+      const msg = editState.isModified
+        ? '当前有已修改但未导出的数据，离开后将丢失。确定要离开吗？'
+        : '当前有已加载的数据，离开后将丢失。确定要离开吗？'
+      if (window.confirm(msg)) {
+        // User confirmed: go back for real
+        window.history.back()
+      } else {
+        // User cancelled: re-push guard entry to stay
+        window.history.pushState({ excelGuard: true }, '')
+      }
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => {
+      window.removeEventListener('popstate', handlePopState)
+      // Clean up the guard entry if component unmounts normally
+      if (window.history.state?.excelGuard) {
+        window.history.back()
+      }
+    }
+  }, [fileInfo, editState.isModified])
+
   // ========================== FILE ==========================
   const handleFileUpload = useCallback(async (file) => {
     try {
