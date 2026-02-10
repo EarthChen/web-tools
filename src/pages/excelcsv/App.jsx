@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import Header from './components/Header'
 import { InlineAd } from '@/components/AdBanner'
@@ -53,6 +53,10 @@ function App() {
   // Advanced dialog state
   const [activeDialog, setActiveDialog] = useState(null)
   // 'conditionalDelete' | 'splitColumn' | 'mergeColumns' | 'regexExtract' | 'vlookup' | 'numberFormat' | 'dateFormat' | 'exportSelective' | 'exportJson'
+
+  // Drag-and-drop overlay state (when file is already loaded)
+  const [isDragOver, setIsDragOver] = useState(false)
+  const [pendingDropFile, setPendingDropFile] = useState(null) // file awaiting user choice (overwrite/append)
 
   const w = useWorker()
 
@@ -118,16 +122,23 @@ function App() {
   }, [fileInfo])
 
   // Block browser back/forward navigation (popstate) when file is loaded
+  const popstateSkipRef = useRef(false)
   useEffect(() => {
     if (!fileInfo) return
     // Push a guard entry so pressing back triggers popstate instead of leaving
     window.history.pushState({ excelGuard: true }, '')
-    const handlePopState = (e) => {
+    const handlePopState = () => {
+      // Skip popstate events triggered by our own cleanup
+      if (popstateSkipRef.current) {
+        popstateSkipRef.current = false
+        return
+      }
       const msg = editState.isModified
         ? '当前有已修改但未导出的数据，离开后将丢失。确定要离开吗？'
         : '当前有已加载的数据，离开后将丢失。确定要离开吗？'
       if (window.confirm(msg)) {
         // User confirmed: go back for real
+        popstateSkipRef.current = true
         window.history.back()
       } else {
         // User cancelled: re-push guard entry to stay
@@ -139,6 +150,7 @@ function App() {
       window.removeEventListener('popstate', handlePopState)
       // Clean up the guard entry if component unmounts normally
       if (window.history.state?.excelGuard) {
+        popstateSkipRef.current = true
         window.history.back()
       }
     }
@@ -431,6 +443,67 @@ function App() {
     } catch (e) { setStatus({ type: 'error', message: e.message }) }
   }, [currentSheet, w, filters, filteredIndices, sheetFilters, sheetIndices])
 
+  // ========================== DRAG & DROP (with file loaded) ==========================
+  const isValidDropFile = useCallback((file) => {
+    const validExtensions = ['.csv', '.xls', '.xlsx', '.json', '.jsonl', '.ndjson']
+    return validExtensions.some(ext => file.name.toLowerCase().endsWith(ext))
+  }, [])
+
+  // Prevent browser from navigating to dropped files globally (when file is loaded)
+  const dragCounterRef = useRef(0)
+  useEffect(() => {
+    if (!fileInfo) return
+    const preventDragNav = (e) => { e.preventDefault() }
+    const handleGlobalDragEnter = (e) => {
+      e.preventDefault()
+      dragCounterRef.current++
+      if (dragCounterRef.current === 1) setIsDragOver(true)
+    }
+    const handleGlobalDragLeave = (e) => {
+      e.preventDefault()
+      dragCounterRef.current--
+      if (dragCounterRef.current <= 0) { dragCounterRef.current = 0; setIsDragOver(false) }
+    }
+    const handleGlobalDrop = (e) => {
+      e.preventDefault()
+      dragCounterRef.current = 0
+      setIsDragOver(false)
+      const file = e.dataTransfer.files[0]
+      if (file && isValidDropFile(file)) {
+        setPendingDropFile(file)
+      }
+    }
+    window.addEventListener('dragover', preventDragNav)
+    window.addEventListener('dragenter', handleGlobalDragEnter)
+    window.addEventListener('dragleave', handleGlobalDragLeave)
+    window.addEventListener('drop', handleGlobalDrop)
+    return () => {
+      window.removeEventListener('dragover', preventDragNav)
+      window.removeEventListener('dragenter', handleGlobalDragEnter)
+      window.removeEventListener('dragleave', handleGlobalDragLeave)
+      window.removeEventListener('drop', handleGlobalDrop)
+      dragCounterRef.current = 0
+    }
+  }, [fileInfo, isValidDropFile])
+
+  const handleDropOverwrite = useCallback(() => {
+    if (pendingDropFile) {
+      handleFileUpload(pendingDropFile)
+      setPendingDropFile(null)
+    }
+  }, [pendingDropFile, handleFileUpload])
+
+  const handleDropAppend = useCallback(() => {
+    if (pendingDropFile) {
+      handleAppendFile(pendingDropFile)
+      setPendingDropFile(null)
+    }
+  }, [pendingDropFile, handleAppendFile])
+
+  const handleDropCancel = useCallback(() => {
+    setPendingDropFile(null)
+  }, [])
+
   // ========================== RENDER ==========================
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 flex flex-col">
@@ -454,7 +527,7 @@ function App() {
         sheetNames={sheetNames} currentSheet={currentSheet} onSwitchSheet={handleSwitchSheet}
         onExport={handleExport} onClear={handleClear} editState={editState} onUndo={handleUndo} onRedo={handleRedo}
         onSearch={() => setSearchOpen(true)} onFindDuplicates={handleFindDuplicates} onClearDuplicates={() => setDuplicateHighlights([])}
-        hasDuplicates={duplicateHighlights.length > 0} onAutoFitWidths={handleAutoFitWidths} onAppendFile={handleAppendFile}
+        hasDuplicates={duplicateHighlights.length > 0} onAutoFitWidths={handleAutoFitWidths} onImportFile={(file) => setPendingDropFile(file)}
         frozenColumns={frozenColumns} onFrozenColumnsChange={setFrozenColumns} headers={headers}
         hiddenColumns={hiddenColumns} onShowColumn={handleShowColumn} onShowAllColumns={handleShowAllColumns}
         onAdvancedAction={handleAdvancedAction}
@@ -467,7 +540,7 @@ function App() {
         <FilterTags filters={filters} headers={headers} onRemoveFilter={handleRemoveFilter} onClearAll={handleClearAllFilters} />
       )}
 
-      <main className="flex-1 flex flex-col p-4 overflow-hidden">
+      <main className="flex-1 flex flex-col p-4 overflow-hidden relative">
         {!fileInfo ? (
           <FileUploader onFileSelect={handleFileUpload} progress={uploadProgress} isLoading={status.type === 'loading'} />
         ) : (
@@ -480,7 +553,79 @@ function App() {
             onContextMenu={(e, info) => setContextMenu({ isOpen: true, position: { x: e.clientX, y: e.clientY }, cellInfo: info })}
             frozenColumns={frozenColumns} hiddenColumns={hiddenColumns} />
         )}
+
+        {/* Drag overlay when file is loaded */}
+        {isDragOver && fileInfo && (
+          <div className="absolute inset-0 z-50 bg-emerald-500/10 dark:bg-emerald-400/10 backdrop-blur-sm border-2 border-dashed border-emerald-500 rounded-xl flex items-center justify-center pointer-events-none">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl px-8 py-6 text-center">
+              <div className="w-14 h-14 rounded-xl bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center mx-auto mb-3">
+                <svg className="w-7 h-7 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+              </div>
+              <p className="text-lg font-semibold text-gray-800 dark:text-white">释放文件以导入</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">将提示选择覆盖或追加模式</p>
+            </div>
+          </div>
+        )}
       </main>
+
+      {/* Drop mode selection dialog */}
+      {pendingDropFile && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={handleDropCancel}>
+          <div
+            className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 py-5 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">检测到新文件</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                <span className="font-medium text-gray-700 dark:text-gray-300">{pendingDropFile.name}</span>
+                <span className="ml-2">({(pendingDropFile.size / 1024).toFixed(1)} KB)</span>
+              </p>
+            </div>
+            <div className="p-6 space-y-3">
+              <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">当前已加载数据，请选择导入方式：</p>
+              <button
+                onClick={handleDropOverwrite}
+                className="w-full flex items-center gap-4 px-4 py-3.5 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-all group"
+              >
+                <div className="w-10 h-10 rounded-lg bg-red-100 dark:bg-red-900/30 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-5 h-5 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </div>
+                <div className="text-left">
+                  <p className="text-sm font-semibold text-gray-800 dark:text-white group-hover:text-emerald-700 dark:group-hover:text-emerald-400">覆盖当前数据</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">清空现有数据，使用新文件替换</p>
+                </div>
+              </button>
+              <button
+                onClick={handleDropAppend}
+                className="w-full flex items-center gap-4 px-4 py-3.5 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-all group"
+              >
+                <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                </div>
+                <div className="text-left">
+                  <p className="text-sm font-semibold text-gray-800 dark:text-white group-hover:text-emerald-700 dark:group-hover:text-emerald-400">追加到现有数据</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">保留现有数据，将新文件追加到末尾</p>
+                </div>
+              </button>
+            </div>
+            <div className="px-6 py-3 bg-gray-50 dark:bg-gray-800/80 border-t border-gray-200 dark:border-gray-700 flex justify-end">
+              <button
+                onClick={handleDropCancel}
+                className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <StatusBar status={status} />
       <div className="p-4 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-200 dark:border-gray-700"><InlineAd /></div>

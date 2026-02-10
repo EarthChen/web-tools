@@ -17,9 +17,16 @@ export default function FilterPopover({
   const [searchTerm, setSearchTerm] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [hasMore, setHasMore] = useState(false)
-  const [position, setPosition] = useState({ top: 0, left: 0 })
+  const [position, setPosition] = useState(null)
   const popoverRef = useRef(null)
   const searchTimeoutRef = useRef(null)
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+  // Stable refs to capture props for async operations (avoids stale closures)
+  const onGetUniqueValuesRef = useRef(onGetUniqueValues)
+  onGetUniqueValuesRef.current = onGetUniqueValues
+  const columnIndexRef = useRef(columnIndex)
+  columnIndexRef.current = columnIndex
 
   // 计算弹窗位置 - 只在挂载时计算一次
   useEffect(() => {
@@ -34,58 +41,84 @@ export default function FilterPopover({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // Run once on mount; anchor position is stable when popover opens
 
-  // 加载唯一值
-  const loadValues = useCallback(async (search = '') => {
-    setIsLoading(true)
-    try {
-      const result = await onGetUniqueValues(columnIndex, search)
-      setValues(result.values)
-      setHasMore(result.hasMore)
-      
-      // 如果没有当前筛选，默认全选
-      if (!currentFilter) {
-        setSelectedValues(new Set(result.values))
+  // 加载唯一值 - 仅初始加载一次
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      setIsLoading(true)
+      try {
+        const result = await onGetUniqueValuesRef.current(columnIndexRef.current)
+        if (cancelled) return
+        setValues(result.values)
+        setHasMore(result.hasMore)
+        // 如果没有当前筛选，默认全选
+        if (!currentFilter) {
+          setSelectedValues(new Set(result.values))
+        }
+      } catch (error) {
+        if (!cancelled) console.error('Failed to load unique values:', error)
+      } finally {
+        if (!cancelled) setIsLoading(false)
       }
-    } catch (error) {
-      console.error('Failed to load unique values:', error)
-    } finally {
-      setIsLoading(false)
     }
-  }, [columnIndex, onGetUniqueValues, currentFilter])
+    load()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Load once on mount
 
-  // 初始加载
+  // 搜索防抖 - 仅在 searchTerm 变化时触发（跳过初始空字符串）
+  const isFirstRenderRef = useRef(true)
   useEffect(() => {
-    loadValues()
-  }, [loadValues])
+    if (isFirstRenderRef.current) {
+      isFirstRenderRef.current = false
+      return
+    }
 
-  // 搜索防抖
-  useEffect(() => {
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current)
     }
-    
-    searchTimeoutRef.current = setTimeout(() => {
-      loadValues(searchTerm)
+
+    let cancelled = false
+    searchTimeoutRef.current = setTimeout(async () => {
+      setIsLoading(true)
+      try {
+        const result = await onGetUniqueValuesRef.current(columnIndexRef.current, searchTerm)
+        if (cancelled) return
+        setValues(result.values)
+        setHasMore(result.hasMore)
+      } catch (error) {
+        if (!cancelled) console.error('Failed to search unique values:', error)
+      } finally {
+        if (!cancelled) setIsLoading(false)
+      }
     }, 300)
-    
+
     return () => {
+      cancelled = true
       if (searchTimeoutRef.current) {
         clearTimeout(searchTimeoutRef.current)
       }
     }
-  }, [searchTerm, loadValues])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm])
 
-  // 点击外部关闭
+  // 点击外部关闭 - 使用 ref 避免依赖 onClose 导致重注册
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (popoverRef.current && !popoverRef.current.contains(e.target)) {
-        onClose()
+        onCloseRef.current()
       }
     }
-    
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [onClose])
+
+    // Delay registration to avoid catching the same click that opened the popover
+    const timer = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside)
+    }, 0)
+    return () => {
+      clearTimeout(timer)
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, []) // Empty deps - onCloseRef is used instead
 
   const handleToggleValue = (value) => {
     const newSelected = new Set(selectedValues)
@@ -133,12 +166,15 @@ export default function FilterPopover({
     onClose()
   }
 
+  if (!position) return null // Wait for position calculation
+
   return createPortal(
     <div
       ref={popoverRef}
       className="fixed w-72 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 z-[9999] overflow-hidden"
       style={{ top: position.top, left: position.left }}
       onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
     >
       {/* 标题栏 */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/80">

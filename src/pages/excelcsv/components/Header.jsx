@@ -24,7 +24,7 @@ export default function Header({
   onClearDuplicates,
   hasDuplicates,
   onAutoFitWidths,
-  onAppendFile,
+  onImportFile,
   frozenColumns, // Set<number>
   onFrozenColumnsChange,
   headers = [],
@@ -50,13 +50,13 @@ export default function Header({
   const exportBtnRef = useRef(null)
   const [exportMenuPos, setExportMenuPos] = useState({ top: 0, left: 0 })
 
-  const handleAppendFileChange = useCallback((e) => {
+  const handleImportFileChange = useCallback((e) => {
     const file = e.target.files?.[0]
     if (file) {
-      onAppendFile?.(file)
+      onImportFile?.(file)
       e.target.value = ''
     }
-  }, [onAppendFile])
+  }, [onImportFile])
 
   const toggleFreezeColumn = useCallback((colIndex) => {
     if (!onFrozenColumnsChange) return
@@ -279,9 +279,9 @@ export default function Header({
 
               <div className="w-px h-5 bg-gray-200 dark:bg-gray-700 mx-0.5" />
 
-              {/* Append import */}
-              <input ref={appendInputRef} type="file" accept=".csv,.xls,.xlsx,.json,.jsonl,.ndjson" onChange={handleAppendFileChange} className="hidden" />
-              <button onClick={() => appendInputRef.current?.click()} className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors" title="追加导入">
+              {/* Import file (overwrite/append dialog) */}
+              <input ref={appendInputRef} type="file" accept=".csv,.xls,.xlsx,.json,.jsonl,.ndjson" onChange={handleImportFileChange} className="hidden" />
+              <button onClick={() => appendInputRef.current?.click()} className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors" title="导入文件">
                 <FilePlus2 className="w-4 h-4" />
               </button>
 

@@ -153,6 +153,9 @@ export default function VirtualTable({
     setEffectiveWidths(prev => ({ ...prev, [index]: Math.max(80, newWidth) }))
   }, [setEffectiveWidths])
 
+  // --- Filter Popover ---
+  const handleCloseFilter = useCallback(() => setActiveFilter(null), [])
+
   // --- Sort ---
   const handleSort = useCallback((columnIndex) => {
     if (!onSort) return
@@ -378,18 +381,6 @@ export default function VirtualTable({
           <Filter className="w-3.5 h-3.5" />
         </button>
 
-        {activeFilter === index && (
-          <FilterPopover
-            columnIndex={index}
-            columnName={header}
-            currentFilter={filters[index]}
-            onApply={onFilterChange}
-            onClose={() => setActiveFilter(null)}
-            onGetUniqueValues={onGetUniqueValues}
-            anchorEl={filterButtonRefs.current[index]}
-          />
-        )}
-
         {/* Column resize handle */}
         <div
           className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-emerald-500 active:bg-emerald-600"
@@ -542,6 +533,19 @@ export default function VirtualTable({
           {virtualItems.map(renderRow)}
         </div>
       </div>
+
+      {/* Filter Popover - rendered outside scroll container with stable callbacks */}
+      {activeFilter !== null && (
+        <FilterPopover
+          columnIndex={activeFilter}
+          columnName={headers[activeFilter]}
+          currentFilter={filters[activeFilter]}
+          onApply={onFilterChange}
+          onClose={handleCloseFilter}
+          onGetUniqueValues={onGetUniqueValues}
+          anchorEl={filterButtonRefs.current[activeFilter]}
+        />
+      )}
 
       {/* Footer */}
       <div className="flex-shrink-0 px-4 py-2 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-500 flex justify-between">
