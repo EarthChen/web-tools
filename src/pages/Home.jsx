@@ -36,6 +36,17 @@ const tools = [
     span: 'md:col-span-3',
   },
   {
+    id: 'image-tools',
+    name: '图片工具箱',
+    description: '压缩、格式转换、拼接',
+    longDescription: '一站式图片处理工具。支持批量压缩（可视化对比）、格式互转（PNG/JPG/WebP/ICO）、多图拼接（横向/纵向/网格）。',
+    icon: '🖼️',
+    path: '/image-tools',
+    tags: ['图片', '压缩', '转换'],
+    color: 'from-purple-400 to-fuchsia-500',
+    span: 'md:col-span-3',
+  },
+  {
     id: 'photo-tool',
     name: '证件照 Pro',
     description: 'AI 智能抠图与尺寸调整',
