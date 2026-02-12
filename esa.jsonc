@@ -1,0 +1,10 @@
+{
+  // Alibaba Cloud ESA Pages configuration
+  // Docs: https://github.com/aliyun/alibabacloud-esa-cli/blob/master/docs/Config_en.md
+  "name": "web-tools-aliyun-pages",
+  "description": "EarthChen web-tools static site deployed to Alibaba Cloud ESA Pages",
+  "assets": {
+    "directory": "./dist",
+    "notFoundStrategy": "singlePageApplication"
+  }
+}
