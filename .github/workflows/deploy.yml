@@ -115,11 +115,14 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Install esa-cli
+        run: npm install -g esa-cli@latest
+
       - name: Login to Aliyun ESA
         env:
           ESA_ACCESS_KEY_ID: ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
           ESA_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
-        run: npx esa-cli login
+        run: esa-cli login
 
       - name: Deploy to Aliyun Pages
-        run: npx esa-cli deploy --name web-tools-aliyun-pages --assets ./dist -e production
+        run: esa-cli deploy --name web-tools-aliyun-pages --assets ./dist -e production
